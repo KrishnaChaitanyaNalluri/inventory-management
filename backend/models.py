@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -7,7 +7,7 @@ from datetime import datetime
 
 class LoginRequest(BaseModel):
     identifier: str   # phone or email
-    pin: str
+    pin: str = Field(min_length=4, max_length=6)
 
 
 class LoginResponse(BaseModel):
@@ -35,7 +35,7 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
-    pin: Optional[str] = None
+    pin: Optional[str] = Field(None, min_length=4, max_length=6)
 
 
 # ── Inventory Items ────────────────────────────────────────────────────────────

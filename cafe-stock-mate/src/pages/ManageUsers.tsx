@@ -227,15 +227,16 @@ export default function ManageUsers() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="nu-pin">PIN (min 4 characters)</Label>
+                <Label htmlFor="nu-pin">PIN (4–6 digits)</Label>
                 <Input
                   id="nu-pin"
                   type="password"
                   inputMode="numeric"
                   value={addPin}
-                  onChange={e => setAddPin(e.target.value)}
+                  onChange={e => setAddPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   required
                   minLength={4}
+                  maxLength={6}
                   autoComplete="new-password"
                 />
               </div>
@@ -303,15 +304,16 @@ export default function ManageUsers() {
                   </Select>
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="eu-pin">New PIN (optional)</Label>
+                  <Label htmlFor="eu-pin">New PIN (optional, 4–6 digits)</Label>
                   <Input
                     id="eu-pin"
                     type="password"
                     inputMode="numeric"
                     value={editPin}
-                    onChange={e => setEditPin(e.target.value)}
+                    onChange={e => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="Leave blank to keep current PIN"
                     minLength={4}
+                    maxLength={6}
                   />
                 </div>
               </div>

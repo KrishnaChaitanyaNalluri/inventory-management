@@ -3,7 +3,8 @@ import { Delete } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
-const PIN_LENGTH = 4;
+const MIN_PIN_LENGTH = 4;
+const MAX_PIN_LENGTH = 6;
 
 const PAD_KEYS = [
   ['1', '2', '3'],
@@ -26,11 +27,11 @@ export default function Login() {
       setError('');
       return;
     }
-    if (pin.length >= PIN_LENGTH) return;
+    if (pin.length >= MAX_PIN_LENGTH) return;
     const next = pin + key;
     setPin(next);
     setError('');
-    if (next.length === PIN_LENGTH) {
+    if (next.length === MAX_PIN_LENGTH) {
       submitLogin(next);
     }
   };
@@ -108,11 +109,12 @@ export default function Login() {
               </button>
               <p className="text-base font-semibold text-foreground">Enter your PIN</p>
               <p className="text-sm text-muted-foreground mt-0.5 truncate">{identifier}</p>
+              <p className="text-xs text-muted-foreground mt-1">{MIN_PIN_LENGTH}–{MAX_PIN_LENGTH} digits</p>
             </div>
 
             {/* PIN dots */}
-            <div className="flex justify-center gap-4">
-              {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+            <div className="flex justify-center gap-2.5 sm:gap-3">
+              {Array.from({ length: MAX_PIN_LENGTH }).map((_, i) => (
                 <div
                   key={i}
                   className={cn(
@@ -131,6 +133,16 @@ export default function Login() {
 
             {isLoading && (
               <p className="text-center text-xs text-muted-foreground animate-pulse">Signing in…</p>
+            )}
+
+            {pin.length >= MIN_PIN_LENGTH && pin.length < MAX_PIN_LENGTH && !isLoading && (
+              <button
+                type="button"
+                onClick={() => submitLogin(pin)}
+                className="w-full rounded-2xl bg-primary py-3 text-sm font-bold text-white active:opacity-90"
+              >
+                Sign in
+              </button>
             )}
 
             {/* PIN pad */}

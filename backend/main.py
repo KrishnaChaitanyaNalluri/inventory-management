@@ -143,8 +143,6 @@ def list_users(_admin=Depends(require_admin)):
 def create_user(body: CreateUserRequest, _admin=Depends(require_admin)):
     if body.role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
-    if len(body.pin) < 4:
-        raise HTTPException(status_code=400, detail="PIN must be at least 4 characters")
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
@@ -183,9 +181,6 @@ def update_user(user_id: str, body: UpdateUserRequest, admin=Depends(require_adm
 
     if body.role is not None and body.role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
-
-    if body.pin is not None and len(body.pin) < 4:
-        raise HTTPException(status_code=400, detail="PIN must be at least 4 characters")
 
     with get_cursor() as cur:
         cur.execute(
