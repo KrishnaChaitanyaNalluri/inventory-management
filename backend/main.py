@@ -14,11 +14,16 @@ import settings
 from database import get_cursor, close_pool
 from models import (
     LoginRequest, LoginResponse,
+    UserPublicResponse,
+    CreateUserRequest,
+    UpdateUserRequest,
     InventoryItemResponse,
     AdjustQuantityRequest,
     UpdateThresholdRequest,
     TransactionResponse,
 )
+
+ALLOWED_ROLES = frozenset({"employee", "manager", "admin"})
 
 
 @asynccontextmanager
@@ -41,7 +46,7 @@ app.add_middleware(
 
 bearer = HTTPBearer()
 
-JWT_SECRET = settings.JWT_SECRET or "change-me"
+JWT_SECRET = settings.JWT_SECRET
 JWT_ALGORITHM = settings.JWT_ALGORITHM
 JWT_EXPIRE_MINUTES = settings.JWT_EXPIRE_MINUTES
 
@@ -71,9 +76,25 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer)
 
 
 def require_manager(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") != "manager":
+    if user.get("role") not in ("manager", "admin"):
         raise HTTPException(status_code=403, detail="Only managers can change alert thresholds")
     return user
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage users")
+    return user
+
+
+def split_login_identifier(identifier: str) -> tuple[Optional[str], Optional[str]]:
+    """Return (email, phone) — exactly one set, for storage."""
+    s = identifier.strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="identifier is required")
+    if "@" in s:
+        return (s, None)
+    return (None, s)
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
@@ -102,6 +123,116 @@ def login(body: LoginRequest):
         user_id=row[0],
         name=row[1],
         role=row[2],
+    )
+
+
+# ── Users (admin) ─────────────────────────────────────────────────────────────
+
+@app.get("/users", response_model=list[UserPublicResponse])
+def list_users(_admin=Depends(require_admin)):
+    with get_cursor() as cur:
+        cur.execute("SELECT id, name, email, phone, role FROM users ORDER BY name")
+        rows = cur.fetchall()
+    return [
+        UserPublicResponse(id=r[0], name=r[1], email=r[2], phone=r[3], role=r[4])
+        for r in rows
+    ]
+
+
+@app.post("/users", response_model=UserPublicResponse)
+def create_user(body: CreateUserRequest, _admin=Depends(require_admin)):
+    if body.role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    if len(body.pin) < 4:
+        raise HTTPException(status_code=400, detail="PIN must be at least 4 characters")
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    email, phone = split_login_identifier(body.identifier)
+
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id FROM users WHERE phone = %s OR email = %s",
+            (body.identifier.strip(), body.identifier.strip()),
+        )
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="A user with this phone or email already exists")
+
+        new_id = "u" + uuid.uuid4().hex[:10]
+        pin_hash = bcrypt.hashpw(body.pin.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        cur.execute(
+            """INSERT INTO users (id, name, email, phone, pin_hash, role)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (new_id, name, email, phone, pin_hash, body.role),
+        )
+        cur.execute(
+            "SELECT id, name, email, phone, role FROM users WHERE id = %s",
+            (new_id,),
+        )
+        row = cur.fetchone()
+
+    return UserPublicResponse(
+        id=row[0], name=row[1], email=row[2], phone=row[3], role=row[4],
+    )
+
+
+@app.patch("/users/{user_id}", response_model=UserPublicResponse)
+def update_user(user_id: str, body: UpdateUserRequest, admin=Depends(require_admin)):
+    admin_id = admin["id"]
+
+    if body.role is not None and body.role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    if body.pin is not None and len(body.pin) < 4:
+        raise HTTPException(status_code=400, detail="PIN must be at least 4 characters")
+
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id, name, email, phone, role FROM users WHERE id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        old_role = row[4]
+        if user_id == admin_id and body.role is not None and body.role != old_role:
+            raise HTTPException(status_code=400, detail="You cannot change your own role")
+        if (
+            body.role is not None
+            and body.role != old_role
+            and old_role == "admin"
+        ):
+            cur.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+            if cur.fetchone()[0] <= 1:
+                raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+
+        new_name = body.name.strip() if body.name is not None else row[1]
+        if body.name is not None and not new_name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        new_role = body.role if body.role is not None else old_role
+
+        if body.pin is not None:
+            pin_hash = bcrypt.hashpw(body.pin.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            cur.execute(
+                "UPDATE users SET name = %s, role = %s, pin_hash = %s WHERE id = %s",
+                (new_name, new_role, pin_hash, user_id),
+            )
+        else:
+            cur.execute(
+                "UPDATE users SET name = %s, role = %s WHERE id = %s",
+                (new_name, new_role, user_id),
+            )
+
+        cur.execute(
+            "SELECT id, name, email, phone, role FROM users WHERE id = %s",
+            (user_id,),
+        )
+        out = cur.fetchone()
+
+    return UserPublicResponse(
+        id=out[0], name=out[1], email=out[2], phone=out[3], role=out[4],
     )
 
 
@@ -208,11 +339,40 @@ def update_threshold(item_id: str, body: UpdateThresholdRequest, user=Depends(re
         raise HTTPException(status_code=400, detail="threshold must be >= 0")
     with get_cursor() as cur:
         cur.execute(
-            "UPDATE inventory_items SET low_stock_threshold = %s WHERE id = %s RETURNING id",
+            "SELECT low_stock_threshold, name, unit FROM inventory_items WHERE id = %s FOR UPDATE",
+            (item_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        old_threshold, item_name, unit = row
+        if old_threshold == body.threshold:
+            return {"ok": True}
+
+        cur.execute(
+            "UPDATE inventory_items SET low_stock_threshold = %s WHERE id = %s",
             (body.threshold, item_id),
         )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Item not found")
+        now = datetime.now(timezone.utc)
+        tx_id = f"t{uuid.uuid4().hex[:12]}"
+        cur.execute(
+            """INSERT INTO inventory_transactions
+               (id, item_id, item_name, unit, action, quantity, reason, note, employee_id, employee_name, timestamp)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                tx_id,
+                item_id,
+                item_name,
+                unit,
+                "set_threshold",
+                body.threshold,
+                "threshold_change",
+                f"Previous alert level was {old_threshold}",
+                user["id"],
+                user["name"],
+                now,
+            ),
+        )
     return {"ok": True}
 
 

@@ -61,8 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_tx_timestamp      ON inventory_transactions(times
 # ── Seed Data ─────────────────────────────────────────────────────────────────
 
 USERS = [
+    ("u_admin", "Store Admin", "admin@dumont.com", None, "9999", "admin"),
     ("u1", "Harshitha Vadavalli", None,             "4086638976", "1234", "manager"),
-    ("u2", "Chay N",              None,             "1235",       "1235", "manager"),
+    ("u2", "Chay N",              None,             "1235",       "1235", "admin"),
 ]
 
 # (id, name, category, sub_category, unit, current_qty, low_threshold, storage, note)

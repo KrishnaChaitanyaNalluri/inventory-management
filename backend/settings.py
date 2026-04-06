@@ -36,19 +36,32 @@ else:
     ]
 
 
+_FORBIDDEN_JWT_SECRETS = frozenset(
+    {
+        "change-me",
+        "change-this-to-a-long-random-secret",
+        "secret",
+        "jwt-secret",
+    }
+)
+
+
 def validate_settings() -> None:
-    """Exit on misconfiguration in production; warn in development."""
+    """Exit on misconfiguration in production; warn in development (except JWT, always required)."""
+    if not JWT_SECRET:
+        print("[FATAL] JWT_SECRET is not set. Add it to .env (min 24 chars). Example: openssl rand -base64 32", file=sys.stderr)
+        sys.exit(1)
+    if JWT_SECRET in _FORBIDDEN_JWT_SECRETS:
+        print("[FATAL] JWT_SECRET is a known weak placeholder. Use a long random value (e.g. openssl rand -base64 32).", file=sys.stderr)
+        sys.exit(1)
+
     errors: list[str] = []
 
     if not DATABASE_URL:
         errors.append("DATABASE_URL is not set")
 
-    if not JWT_SECRET:
-        errors.append("JWT_SECRET is not set")
-    elif JWT_SECRET in ("change-me", "change-this-to-a-long-random-secret"):
-        errors.append("JWT_SECRET must be changed from the example value")
-    elif len(JWT_SECRET) < 24:
-        errors.append("JWT_SECRET should be at least 24 characters in production")
+    if len(JWT_SECRET) < 24:
+        errors.append("JWT_SECRET should be at least 24 characters")
 
     if IS_PRODUCTION:
         if not _raw_cors:

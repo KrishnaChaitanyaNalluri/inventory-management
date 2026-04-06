@@ -17,6 +17,27 @@ class LoginResponse(BaseModel):
     role: str
 
 
+class UserPublicResponse(BaseModel):
+    id: str
+    name: str
+    email: Optional[str]
+    phone: Optional[str]
+    role: str
+
+
+class CreateUserRequest(BaseModel):
+    name: str
+    identifier: str  # phone or email (same as login)
+    pin: str
+    role: str
+
+
+class UpdateUserRequest(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    pin: Optional[str] = None
+
+
 # ── Inventory Items ────────────────────────────────────────────────────────────
 
 class InventoryItemResponse(BaseModel):
