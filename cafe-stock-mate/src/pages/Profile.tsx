@@ -1,6 +1,8 @@
+import { useNavigate } from 'react-router-dom';
 import { useInventory } from '@/context/InventoryContext';
 import { useAuth } from '@/context/AuthContext';
-import { LogOut, Shield, User, Package, ClipboardList, AlertTriangle } from 'lucide-react';
+import { LogOut, Shield, User, Package, ClipboardList, AlertTriangle, Crown, Users } from 'lucide-react';
+import { canEditThreshold } from '@/types/inventory';
 
 /** Staff: everyone logged in. Manager extra: only role manager. */
 const STAFF_PILLS: { label: string }[] = [
@@ -18,6 +20,7 @@ const MANAGER_EXTRA_PILLS: { label: string }[] = [
 ];
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { currentUser: authUser, logout } = useAuth();
   const { items, transactions, getLowStockItems } = useInventory();
   const currentUser = authUser ?? { id: '', name: '—', role: 'employee' as const };
@@ -27,7 +30,8 @@ export default function Profile() {
   const todayStr = new Date().toDateString();
   const todayCount = transactions.filter(t => new Date(t.timestamp).toDateString() === todayStr).length;
 
-  const isManager = currentUser.role === 'manager';
+  const isManager = canEditThreshold(currentUser.role);
+  const isAdmin = currentUser.role === 'admin';
 
   return (
     <div className="min-h-screen pb-24 bg-background overflow-x-hidden">
@@ -41,7 +45,13 @@ export default function Profile() {
           <div className="min-w-0">
             <p className="text-white font-bold text-lg leading-tight">{currentUser.name}</p>
             <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white capitalize">
-              {currentUser.role === 'manager' ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
+              {currentUser.role === 'admin' ? (
+                <Crown className="h-3 w-3" />
+              ) : currentUser.role === 'manager' ? (
+                <Shield className="h-3 w-3" />
+              ) : (
+                <User className="h-3 w-3" />
+              )}
               {currentUser.role}
             </span>
           </div>
@@ -90,7 +100,7 @@ export default function Profile() {
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <p className="text-sm font-semibold text-foreground mb-1">Permissions</p>
           <p className="text-[11px] text-muted-foreground mb-3">
-            Gray = everyone with login. Green = managers only.
+            Gray = everyone with login. Green = managers and admins (thresholds). Admins can also manage users.
           </p>
 
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Your team (all roles)</p>
@@ -107,7 +117,7 @@ export default function Profile() {
 
           {isManager && (
             <>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-2">Manager only</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-2">Manager &amp; admin</p>
               <div className="flex flex-wrap gap-2">
                 {MANAGER_EXTRA_PILLS.map(p => (
                   <span
@@ -118,6 +128,20 @@ export default function Profile() {
                   </span>
                 ))}
               </div>
+            </>
+          )}
+
+          {isAdmin && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 mb-2">Admin only</p>
+              <button
+                type="button"
+                onClick={() => navigate('/profile/users')}
+                className="flex w-full items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50/80 p-4 text-sm font-semibold text-violet-900 active:bg-violet-100 transition-colors shadow-sm"
+              >
+                <Users className="h-4 w-4" />
+                Manage users &amp; roles
+              </button>
             </>
           )}
         </div>

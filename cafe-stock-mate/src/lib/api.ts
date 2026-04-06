@@ -1,4 +1,12 @@
-import { InventoryItem, InventoryTransaction, Category, StorageLocation, ActionType, TransactionReason } from '@/types/inventory';
+import {
+  InventoryItem,
+  InventoryTransaction,
+  Category,
+  StorageLocation,
+  ActionType,
+  TransactionReason,
+  REASON_LABELS,
+} from '@/types/inventory';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
   || (import.meta.env.DEV ? 'http://localhost:8000' : '');
@@ -121,7 +129,7 @@ export function mapTransaction(r: ApiTransaction): InventoryTransaction {
     unit: r.unit,
     action: r.action as ActionType,
     quantity: r.quantity,
-    reason: r.reason as TransactionReason,
+    reason: (r.reason in REASON_LABELS ? r.reason : 'manual_correction') as TransactionReason,
     note: r.note ?? undefined,
     employeeId: r.employee_id,
     employeeName: r.employee_name,
@@ -186,4 +194,40 @@ export async function apiGetTransactions(params?: {
   const query = qs.toString();
   const rows = await request<ApiTransaction[]>(`/transactions${query ? `?${query}` : ''}`);
   return rows.map(mapTransaction);
+}
+
+// ── Users (admin) ───────────────────────────────────────────────────────────────
+
+export interface ApiUserRow {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: string;
+}
+
+export async function apiListUsers(): Promise<ApiUserRow[]> {
+  return request<ApiUserRow[]>('/users');
+}
+
+export async function apiCreateUser(body: {
+  name: string;
+  identifier: string;
+  pin: string;
+  role: string;
+}): Promise<ApiUserRow> {
+  return request<ApiUserRow>('/users', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiUpdateUser(
+  userId: string,
+  body: { name?: string; role?: string; pin?: string },
+): Promise<ApiUserRow> {
+  return request<ApiUserRow>(`/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 }

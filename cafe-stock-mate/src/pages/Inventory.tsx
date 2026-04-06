@@ -7,7 +7,7 @@ import { SearchBar } from '@/components/SearchBar';
 import { CategoryChips } from '@/components/CategoryChips';
 import { ItemCard } from '@/components/ItemCard';
 import { AddSubtractModal } from '@/components/AddSubtractModal';
-import { InventoryItem, ActionType, Category, CATEGORIES } from '@/types/inventory';
+import { InventoryItem, ActionType, Category, CATEGORIES, canEditThreshold } from '@/types/inventory';
 
 function buildGroupedView(
   items: InventoryItem[],
@@ -127,7 +127,7 @@ export default function Inventory() {
     setModalAction(action);
   };
 
-  const isManager = currentUser?.role === 'manager';
+  const isManager = canEditThreshold(currentUser?.role);
   const handleThreshold = isManager
     ? async (item: InventoryItem, threshold: number) => { await updateThreshold(item.id, threshold); }
     : undefined;

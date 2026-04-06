@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { SearchBar } from '@/components/SearchBar';
 import { ItemCard } from '@/components/ItemCard';
 import { AddSubtractModal } from '@/components/AddSubtractModal';
-import { InventoryItem, ActionType } from '@/types/inventory';
+import { InventoryItem, ActionType, canEditThreshold } from '@/types/inventory';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -27,7 +27,7 @@ export default function Dashboard() {
   const { items, getRecentItems, searchItems, transactions, updateThreshold } = useInventory();
   const { currentUser: authUser } = useAuth();
   const currentUser = authUser ?? { name: '—' };
-  const isManager = authUser?.role === 'manager';
+  const isManager = canEditThreshold(authUser?.role);
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [modalItem, setModalItem] = useState<InventoryItem | null>(null);

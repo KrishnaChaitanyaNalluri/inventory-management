@@ -1,8 +1,13 @@
 export type StorageLocation = 'storage_room' | 'fridge' | 'freezer' | 'front_counter';
 
-export type UserRole = 'employee' | 'manager';
+export type UserRole = 'employee' | 'manager' | 'admin';
 
-export type ActionType = 'add' | 'subtract';
+/** Managers and admins can edit low-stock thresholds. */
+export function canEditThreshold(role: UserRole | undefined): boolean {
+  return role === 'manager' || role === 'admin';
+}
+
+export type ActionType = 'add' | 'subtract' | 'set_threshold';
 
 export type TransactionReason =
   | 'moved_to_front'
@@ -10,7 +15,8 @@ export type TransactionReason =
   | 'new_delivery'
   | 'spoilage_waste'
   | 'damaged'
-  | 'manual_correction';
+  | 'manual_correction'
+  | 'threshold_change';
 
 export const REASON_LABELS: Record<TransactionReason, string> = {
   moved_to_front: 'Moved to front counter',
@@ -19,6 +25,7 @@ export const REASON_LABELS: Record<TransactionReason, string> = {
   spoilage_waste: 'Spoilage / Waste',
   damaged: 'Damaged',
   manual_correction: 'Manual correction',
+  threshold_change: 'Low stock threshold updated',
 };
 
 export const CATEGORIES = [

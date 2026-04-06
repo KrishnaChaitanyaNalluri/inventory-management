@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import ActivityLog from "./pages/ActivityLog";
 import Profile from "./pages/Profile";
+import ManageUsers from "./pages/ManageUsers";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -35,6 +36,7 @@ function AppRoutes() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/activity" element={<ActivityLog />} />
+          <Route path="/profile/users" element={<ManageUsers />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

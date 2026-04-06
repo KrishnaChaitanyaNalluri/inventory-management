@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Minus } from 'lucide-react';
+import { Plus, Minus, Bell } from 'lucide-react';
 import { useInventory } from '@/context/InventoryContext';
 import { REASON_LABELS, ActionType } from '@/types/inventory';
 import { cn } from '@/lib/utils';
@@ -33,10 +33,15 @@ export default function ActivityLog() {
     return transactions.filter(t => t.action === filterAction);
   }, [transactions, filterAction]);
 
+  function reasonLabel(reason: string) {
+    return reason in REASON_LABELS ? REASON_LABELS[reason as keyof typeof REASON_LABELS] : reason;
+  }
+
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
   const addCount = transactions.filter(t => t.action === 'add').length;
   const subCount = transactions.filter(t => t.action === 'subtract').length;
+  const thresholdCount = transactions.filter(t => t.action === 'set_threshold').length;
 
   return (
     <div className="min-h-screen pb-24">
@@ -51,6 +56,7 @@ export default function ActivityLog() {
             { key: 'all', label: `All · ${transactions.length}` },
             { key: 'add', label: `Added · ${addCount}` },
             { key: 'subtract', label: `Removed · ${subCount}` },
+            { key: 'set_threshold', label: `Thresholds · ${thresholdCount}` },
           ] as const).map(f => (
             <button
               key={f.key}
@@ -86,13 +92,14 @@ export default function ActivityLog() {
                       <div
                         className={cn(
                           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-0.5',
-                          tx.action === 'add' ? 'bg-primary/10' : 'bg-red-50'
+                          tx.action === 'add' && 'bg-primary/10',
+                          tx.action === 'subtract' && 'bg-red-50',
+                          tx.action === 'set_threshold' && 'bg-amber-50',
                         )}
                       >
-                        {tx.action === 'add'
-                          ? <Plus className="h-3.5 w-3.5 text-primary" />
-                          : <Minus className="h-3.5 w-3.5 text-destructive" />
-                        }
+                        {tx.action === 'add' && <Plus className="h-3.5 w-3.5 text-primary" />}
+                        {tx.action === 'subtract' && <Minus className="h-3.5 w-3.5 text-destructive" />}
+                        {tx.action === 'set_threshold' && <Bell className="h-3.5 w-3.5 text-amber-600" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-sm text-foreground truncate leading-snug">{tx.itemName}</p>
@@ -112,7 +119,7 @@ export default function ActivityLog() {
                     </div>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {REASON_LABELS[tx.reason]}
+                        {reasonLabel(tx.reason)}
                       </span>
                       {tx.note && (
                         <span className="text-[10px] text-muted-foreground italic truncate max-w-[180px]">
