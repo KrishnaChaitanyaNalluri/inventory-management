@@ -16,6 +16,7 @@ __pycache__/
 cafe-stock-mate/node_modules/
 cafe-stock-mate/dist/
 cafe-stock-mate/.vite/
+cafe-stock-mate/bun.lock
 
 # OS / editor
 .DS_Store
