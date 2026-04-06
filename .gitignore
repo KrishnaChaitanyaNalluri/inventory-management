@@ -1,0 +1,23 @@
+# Secrets & local env (never commit)
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Python
+backend/venv/
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+.eggs/
+
+# Node / frontend
+cafe-stock-mate/node_modules/
+cafe-stock-mate/dist/
+cafe-stock-mate/.vite/
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp
