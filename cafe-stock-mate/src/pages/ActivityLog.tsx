@@ -90,7 +90,7 @@ export default function ActivityLog() {
 
         {canUsePurchaseList ? (
           <div
-            className="flex rounded-xl bg-muted/60 p-1 mb-3"
+            className="flex gap-1 rounded-xl border border-border bg-muted/50 p-1 mb-3"
             role="tablist"
             aria-label="Activity sections"
           >
@@ -100,10 +100,10 @@ export default function ActivityLog() {
               aria-selected={tab === 'log'}
               onClick={() => setTab('log')}
               className={cn(
-                'flex-1 rounded-[10px] py-2 text-xs font-bold transition-colors',
+                'flex-1 rounded-lg py-2.5 text-xs font-bold transition-all duration-200',
                 tab === 'log'
-                  ? 'bg-background text-foreground'
-                  : 'text-muted-foreground active:bg-background/40',
+                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
+                  : 'text-muted-foreground bg-transparent hover:bg-muted/80 hover:text-foreground',
               )}
             >
               Stock log
@@ -114,10 +114,10 @@ export default function ActivityLog() {
               aria-selected={tab === 'purchase'}
               onClick={() => setTab('purchase')}
               className={cn(
-                'flex-1 rounded-[10px] py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5',
+                'flex-1 rounded-lg py-2.5 text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5',
                 tab === 'purchase'
-                  ? 'bg-background text-foreground'
-                  : 'text-muted-foreground active:bg-background/40',
+                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
+                  : 'text-muted-foreground bg-transparent hover:bg-muted/80 hover:text-foreground',
               )}
             >
               <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
@@ -126,7 +126,9 @@ export default function ActivityLog() {
                 <span
                   className={cn(
                     'min-w-[1.125rem] rounded-full px-1 text-[10px] font-bold leading-4',
-                    tab === 'purchase' ? 'bg-primary text-primary-foreground' : 'bg-primary/15 text-primary',
+                    tab === 'purchase'
+                      ? 'bg-white/25 text-primary-foreground'
+                      : 'bg-primary/15 text-primary',
                   )}
                 >
                   {purchaseRows.length}
