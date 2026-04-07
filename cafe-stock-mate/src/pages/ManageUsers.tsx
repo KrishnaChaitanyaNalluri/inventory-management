@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Pencil, UserPlus } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { apiCreateUser, apiListUsers, apiUpdateUser, type ApiUserRow } from '@/lib/api';
+import { apiCreateUser, apiDeleteUser, apiListUsers, apiUpdateUser, type ApiUserRow } from '@/lib/api';
 import { UserRole } from '@/types/inventory';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const ROLES: UserRole[] = ['employee', 'manager', 'admin'];
 
@@ -49,6 +58,8 @@ export default function ManageUsers() {
   const [editRole, setEditRole] = useState<UserRole>('employee');
   const [editPin, setEditPin] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ApiUserRow | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!isAdmin) return;
@@ -127,6 +138,22 @@ export default function ManageUsers() {
       toast.error(err instanceof Error ? err.message : 'Could not update user');
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleteSaving(true);
+    try {
+      await apiDeleteUser(deleteTarget.id);
+      toast.success('User removed');
+      setDeleteTarget(null);
+      setEditUser(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not remove user');
+    } finally {
+      setDeleteSaving(false);
     }
   }
 
@@ -317,18 +344,54 @@ export default function ManageUsers() {
                   />
                 </div>
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={editSaving}>
-                  {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+              <DialogFooter className="flex-col gap-2 sm:flex-col">
+                <div className="flex w-full gap-2 justify-end">
+                  <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={editSaving}>
+                    {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                  </Button>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
+                  disabled={editUser.id === currentUser?.id}
+                  onClick={() => {
+                    setDeleteTarget(editUser);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {editUser.id === currentUser?.id ? 'Cannot remove yourself' : 'Remove user from team'}
                 </Button>
               </DialogFooter>
             </form>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They will no longer be able to sign in. Inventory history keeps their past actions with their name.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteSaving}>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteSaving}
+              onClick={() => void handleConfirmDelete()}
+            >
+              {deleteSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Remove user'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

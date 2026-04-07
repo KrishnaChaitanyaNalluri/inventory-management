@@ -11,6 +11,15 @@ export default defineConfig({
     hmr: {
       overlay: false,
     },
+    // Same-origin API in dev: avoids CORS/mixed-origin issues when the UI is opened at
+    // 127.0.0.1 or a LAN IP while VITE_API_URL pointed at localhost (or vice versa).
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
   },
   plugins: [react()],
   resolve: {

@@ -7,7 +7,17 @@ export function canEditThreshold(role: UserRole | undefined): boolean {
   return role === 'manager' || role === 'admin';
 }
 
-export type ActionType = 'add' | 'subtract' | 'set_threshold';
+/** Adding new inventory SKUs — managers and admins only (not employees). */
+export function canAddInventoryItems(role: UserRole | undefined): boolean {
+  return canEditThreshold(role);
+}
+
+/** Managers and admins see the off-site storage tab and can adjust those counts. */
+export function canManageOffsiteStorage(role: UserRole | undefined): boolean {
+  return role === 'manager' || role === 'admin';
+}
+
+export type ActionType = 'add' | 'subtract' | 'set_threshold' | 'offsite_add' | 'offsite_subtract';
 
 export type TransactionReason =
   | 'moved_to_front'
@@ -16,7 +26,9 @@ export type TransactionReason =
   | 'spoilage_waste'
   | 'damaged'
   | 'manual_correction'
-  | 'threshold_change';
+  | 'threshold_change'
+  | 'offsite_delivery'
+  | 'offsite_to_cafe';
 
 export const REASON_LABELS: Record<TransactionReason, string> = {
   moved_to_front: 'Moved to front counter',
@@ -26,6 +38,8 @@ export const REASON_LABELS: Record<TransactionReason, string> = {
   damaged: 'Damaged',
   manual_correction: 'Manual correction',
   threshold_change: 'Low stock threshold updated',
+  offsite_delivery: 'Off-site · Delivery / received',
+  offsite_to_cafe: 'Off-site · Toward cafe (update cafe stock separately)',
 };
 
 export const CATEGORIES = [
@@ -34,6 +48,7 @@ export const CATEGORIES = [
   'Teas',
   'Boba Ingredients',
   'Coffee Ingredients',
+  'Milk & Dairy Alternatives',
   'Sweeteners',
   'Toppings & Add-ins',
   'Disposables & Utensils',
@@ -60,10 +75,22 @@ export interface InventoryItem {
   subCategory?: string;
   unit: string;
   currentQuantity: number;
+  /** Stock held outside the cafe (managers only in UI). */
+  offsiteQuantity: number;
   lowStockThreshold: number;
   storageLocation?: StorageLocation;
   updatedAt: string;
   note?: string;
+}
+
+/** True “out” for dashboards (ice cream placeholders often stay at 0 on purpose). */
+export function isTrueOutOfStock(item: InventoryItem): boolean {
+  return item.currentQuantity === 0 && item.category !== 'Ice Creams';
+}
+
+/** At or below low-stock threshold (includes zero). */
+export function needsAttention(item: InventoryItem): boolean {
+  return item.currentQuantity <= item.lowStockThreshold;
 }
 
 export interface InventoryTransaction {

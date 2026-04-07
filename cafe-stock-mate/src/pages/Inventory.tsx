@@ -1,13 +1,26 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Plus, TrendingDown, Zap } from 'lucide-react';
+import { toast } from 'sonner';
 import { useInventory } from '@/context/InventoryContext';
 import { useAuth } from '@/context/AuthContext';
 import { SearchBar } from '@/components/SearchBar';
 import { CategoryChips } from '@/components/CategoryChips';
 import { ItemCard } from '@/components/ItemCard';
 import { AddSubtractModal } from '@/components/AddSubtractModal';
-import { InventoryItem, ActionType, Category, CATEGORIES, canEditThreshold } from '@/types/inventory';
+import { EditItemDialog } from '@/components/EditItemDialog';
+import { cn } from '@/lib/utils';
+import { buildLastStockEditMap } from '@/lib/inventoryHelpers';
+import {
+  InventoryItem,
+  ActionType,
+  Category,
+  CATEGORIES,
+  canAddInventoryItems,
+  canEditThreshold,
+  isTrueOutOfStock,
+  needsAttention,
+} from '@/types/inventory';
 
 function buildGroupedView(
   items: InventoryItem[],
@@ -44,7 +57,7 @@ function buildGroupedView(
 }
 
 export default function Inventory() {
-  const { items, isLoading, error, updateThreshold } = useInventory();
+  const { items, isLoading, error, updateThreshold, quickAdjust, transactions } = useInventory();
   const { currentUser } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -53,8 +66,18 @@ export default function Inventory() {
   const [subCategory, setSubCategory] = useState<string | 'all'>('all');
   const [modalItem, setModalItem] = useState<InventoryItem | null>(null);
   const [modalAction, setModalAction] = useState<ActionType>('add');
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  const [restockMode, setRestockMode] = useState(false);
+  const [restockFocusId, setRestockFocusId] = useState<string | null>(null);
+  const [advanceFromId, setAdvanceFromId] = useState<string | null>(null);
+  const highlightAppliedRef = useRef<string | null>(null);
+  const restockModeRef = useRef(false);
+  restockModeRef.current = restockMode;
 
-  const showLowOnly = searchParams.get('filter') === 'low';
+  const filterParam = searchParams.get('filter');
+  const showLowOnly = filterParam === 'low';
+  const showOutOnly = filterParam === 'out';
+  const listFilter: 'all' | 'low' | 'out' = showOutOnly ? 'out' : showLowOnly ? 'low' : 'all';
 
   // Sub-categories for the selected category
   const subCategories = useMemo(() => {
@@ -70,13 +93,13 @@ export default function Inventory() {
     return result;
   }, [items, category]);
 
-  // Count of low-stock items per category (for chip badges)
+  // Count of attention items per category (for chip badges on Need attention view)
   const lowStockCounts = useMemo(() => {
     if (!showLowOnly) return undefined;
     const counts: Partial<Record<Category | 'all', number>> = {};
     let total = 0;
     for (const item of items) {
-      if (item.currentQuantity <= item.lowStockThreshold) {
+      if (needsAttention(item)) {
         counts[item.category as Category] = (counts[item.category as Category] ?? 0) + 1;
         total++;
       }
@@ -92,7 +115,8 @@ export default function Inventory() {
 
   const filtered = useMemo(() => {
     let result = items;
-    if (showLowOnly) result = result.filter(i => i.currentQuantity <= i.lowStockThreshold);
+    if (showLowOnly) result = result.filter(needsAttention);
+    if (showOutOnly) result = result.filter(isTrueOutOfStock);
     if (category !== 'all') result = result.filter(i => i.category === category);
     if (subCategory !== 'all') result = result.filter(i => i.subCategory === subCategory);
     if (search) {
@@ -100,27 +124,130 @@ export default function Inventory() {
       result = result.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
     }
     return result;
-  }, [items, category, subCategory, search, showLowOnly]);
+  }, [items, category, subCategory, search, showLowOnly, showOutOnly]);
 
-  const outCount = filtered.filter(i => i.currentQuantity === 0).length;
-  const lowCount = filtered.filter(i => i.currentQuantity > 0 && i.currentQuantity <= i.lowStockThreshold).length;
+  const totalLowCount = useMemo(() => items.filter(needsAttention).length, [items]);
 
-  // Total low-stock count across ALL items (for the toggle badge)
-  const totalLowCount = useMemo(
-    () => items.filter(i => i.currentQuantity <= i.lowStockThreshold).length,
-    [items],
-  );
+  const totalOutCount = useMemo(() => items.filter(isTrueOutOfStock).length, [items]);
 
-  const toggleLowFilter = () => {
-    if (showLowOnly) {
-      navigate('/inventory');
-    } else {
-      navigate('/inventory?filter=low');
-    }
+  const attentionBreakdown = useMemo(() => {
+    const need = items.filter(needsAttention);
+    const outStock = need.filter(
+      i => i.currentQuantity === 0 && i.category !== 'Ice Creams',
+    ).length;
+    const running = need.filter(i => i.currentQuantity > 0).length;
+    const iceZero = need.filter(
+      i => i.currentQuantity === 0 && i.category === 'Ice Creams',
+    ).length;
+    return { total: need.length, outStock, running, iceZero };
+  }, [items]);
+
+  const lastStockEditMap = useMemo(() => buildLastStockEditMap(transactions), [transactions]);
+
+  const setListFilter = (next: 'all' | 'low' | 'out') => {
+    setRestockMode(false);
+    setRestockFocusId(null);
+    setAdvanceFromId(null);
     setCategory('all');
     setSubCategory('all');
     setSearch('');
+    if (next === 'all') navigate('/inventory');
+    else navigate(`/inventory?filter=${next}`);
   };
+
+  useEffect(() => {
+    if (!searchParams.get('highlight')) highlightAppliedRef.current = null;
+  }, [searchParams]);
+
+  useEffect(() => {
+    const id = searchParams.get('highlight');
+    if (!id || isLoading || items.length === 0) return;
+    if (highlightAppliedRef.current === id) return;
+    highlightAppliedRef.current = id;
+    setRestockMode(true);
+    setRestockFocusId(id);
+    const t = window.setTimeout(() => {
+      document.getElementById(`inventory-card-${id}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [searchParams, isLoading, items.length]);
+
+  useEffect(() => {
+    if (!restockMode) {
+      setAdvanceFromId(null);
+      return;
+    }
+    if (advanceFromId === null) return;
+
+    let list = [...items];
+    if (showLowOnly) list = list.filter(needsAttention);
+    if (showOutOnly) list = list.filter(isTrueOutOfStock);
+    if (category !== 'all') list = list.filter(i => i.category === category);
+    if (subCategory !== 'all') list = list.filter(i => i.subCategory === subCategory);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q),
+      );
+    }
+
+    const stillNeeds = (i: InventoryItem) => {
+      if (showOutOnly) return isTrueOutOfStock(i);
+      if (showLowOnly) return needsAttention(i);
+      return false;
+    };
+
+    const ids = list.map(i => i.id);
+    const idx = ids.indexOf(advanceFromId);
+    let next: string | null = null;
+    for (let j = idx + 1; j < ids.length; j++) {
+      const it = items.find(x => x.id === ids[j]);
+      if (it && stillNeeds(it)) {
+        next = ids[j];
+        break;
+      }
+    }
+    if (next === null && idx >= 0) {
+      for (let j = 0; j < idx; j++) {
+        const it = items.find(x => x.id === ids[j]);
+        if (it && stillNeeds(it)) {
+          next = ids[j];
+          break;
+        }
+      }
+    }
+
+    setRestockFocusId(next);
+    setAdvanceFromId(null);
+    if (next) {
+      requestAnimationFrame(() => {
+        document.getElementById(`inventory-card-${next}`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+        });
+      });
+    } else {
+      toast.success('Nothing left in this list that still needs restocking');
+    }
+  }, [
+    advanceFromId,
+    items,
+    restockMode,
+    showLowOnly,
+    showOutOnly,
+    category,
+    subCategory,
+    search,
+  ]);
+
+  useEffect(() => {
+    if (!restockMode || !restockFocusId) return;
+    if (filtered.some(i => i.id === restockFocusId)) return;
+    setRestockFocusId(filtered[0]?.id ?? null);
+  }, [filtered, restockMode, restockFocusId]);
 
   const openModal = (item: InventoryItem, action: ActionType) => {
     setModalItem(item);
@@ -128,66 +255,171 @@ export default function Inventory() {
   };
 
   const isManager = canEditThreshold(currentUser?.role);
+  const canAddSku = canAddInventoryItems(currentUser?.role);
   const handleThreshold = isManager
     ? async (item: InventoryItem, threshold: number) => { await updateThreshold(item.id, threshold); }
     : undefined;
+
+  const handleQuickAdd = async (item: InventoryItem) => {
+    await quickAdjust(item.id, 'add');
+    if (restockModeRef.current) setAdvanceFromId(item.id);
+  };
 
   const renderCard = (item: InventoryItem) => (
     <ItemCard
       key={item.id}
       item={item}
-      onAdd={i => openModal(i, 'add')}
-      onSubtract={i => openModal(i, 'subtract')}
+      onQuickAdd={handleQuickAdd}
+      onQuickSubtract={i => quickAdjust(i.id, 'subtract')}
+      onOpenAdjust={(i, action) => openModal(i, action)}
       onThresholdChange={handleThreshold}
+      onEditDetails={isManager ? i => setEditItem(i) : undefined}
+      restockFocus={restockMode && restockFocusId === item.id}
+      lastStockEdit={lastStockEditMap[item.id] ?? null}
     />
   );
 
-  // Decide grouping strategy
-  const useCategoryGrouping = showLowOnly && category === 'all' && !search && !subCategory || false;
-  const useSubCatGrouping = !search && subCategory === 'all' && filtered.some(i => i.subCategory);
+  const useCategoryGrouping =
+    (showLowOnly || showOutOnly) && category === 'all' && !search && subCategory === 'all';
+  const useSubCatGrouping =
+    !search && subCategory === 'all' && filtered.some(i => i.subCategory);
 
   return (
     <div className="min-h-screen pb-24">
       {/* Sticky Header */}
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border px-4 pt-4 pb-3 space-y-3">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-lg font-bold text-foreground">Inventory</h1>
-          <span className="text-xs text-muted-foreground font-medium">
-            {filtered.length} item{filtered.length !== 1 ? 's' : ''}
-          </span>
+        <div className="flex items-center justify-between mb-1 gap-2">
+          <h1 className="text-lg font-bold text-foreground leading-tight">
+            {showOutOnly ? 'Out of stock' : showLowOnly ? 'Need attention' : 'Inventory'}
+          </h1>
+          <div className="flex items-center gap-2 shrink-0">
+            {canAddSku && (
+              <button
+                type="button"
+                onClick={() => navigate('/inventory/add')}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary active:bg-primary/20"
+                aria-label="Add new inventory item (managers and admins only)"
+                title="Add new item"
+              >
+                <Plus className="h-5 w-5 stroke-[2.5]" />
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground font-medium">
+              {filtered.length} item{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
 
-        {/* All / Low Stock segmented control */}
-        <div className="grid grid-cols-2 rounded-xl border border-border overflow-hidden">
+        <div className="grid grid-cols-3 rounded-xl border border-border overflow-hidden">
           <button
-            onClick={() => { if (showLowOnly) toggleLowFilter(); }}
-            className={`py-2.5 text-xs font-semibold transition-colors ${
-              !showLowOnly
-                ? 'bg-primary text-white'
-                : 'bg-card text-muted-foreground border-r border-border'
-            }`}
+            type="button"
+            onClick={() => setListFilter('all')}
+            className={cn(
+              'py-2.5 px-1.5 text-[11px] font-bold transition-colors border-r border-border',
+              listFilter === 'all' ? 'bg-primary text-white' : 'bg-card text-muted-foreground',
+            )}
           >
-            All Items
+            All items
           </button>
           <button
-            onClick={() => { if (!showLowOnly) toggleLowFilter(); }}
-            className={`py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
-              showLowOnly
-                ? 'bg-amber-500 text-white'
-                : 'bg-card text-muted-foreground border-l border-border'
-            }`}
+            type="button"
+            onClick={() => setListFilter('low')}
+            className={cn(
+              'py-2.5 px-1.5 text-[11px] font-bold transition-colors border-r border-border flex flex-col items-center justify-center gap-0.5 leading-tight',
+              listFilter === 'low' ? 'bg-amber-500 text-white' : 'bg-card text-muted-foreground',
+            )}
           >
-            <AlertTriangle className="h-3 w-3" />
-            Low Stock
+            <span className="flex items-center gap-0.5">
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              <span>Need attention</span>
+            </span>
             {totalLowCount > 0 && (
-              <span className={`rounded-full px-1.5 text-[10px] font-bold leading-4 ${
-                showLowOnly ? 'bg-white/25 text-white' : 'bg-amber-500 text-white'
-              }`}>
-                {totalLowCount}
+              <>
+                <span
+                  className={cn(
+                    'text-[10px] font-bold tabular-nums',
+                    listFilter === 'low' ? 'text-white/90' : 'text-amber-600',
+                  )}
+                >
+                  {totalLowCount} items need attention
+                </span>
+                <span
+                  className={cn(
+                    'text-[9px] font-semibold leading-tight text-center px-0.5',
+                    listFilter === 'low' ? 'text-white/80' : 'text-amber-700/90',
+                  )}
+                >
+                  {attentionBreakdown.outStock} out of stock · {attentionBreakdown.running} low
+                </span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setListFilter('out')}
+            className={cn(
+              'py-2.5 px-1.5 text-[11px] font-bold transition-colors flex flex-col items-center justify-center gap-0.5 leading-tight',
+              listFilter === 'out' ? 'bg-destructive text-white' : 'bg-card text-muted-foreground',
+            )}
+          >
+            <span className="flex items-center gap-0.5">
+              <TrendingDown className="h-3 w-3 shrink-0" />
+              <span>Out</span>
+            </span>
+            {totalOutCount > 0 && (
+              <span
+                className={cn(
+                  'text-[10px] font-bold tabular-nums',
+                  listFilter === 'out' ? 'text-white/90' : 'text-destructive',
+                )}
+              >
+                {totalOutCount} out of stock
               </span>
             )}
           </button>
         </div>
+
+        {listFilter === 'low' && attentionBreakdown.total > 0 && (
+          <p className="text-[10px] text-center text-muted-foreground leading-snug px-1 -mt-1">
+            {attentionBreakdown.total} items need attention · {attentionBreakdown.outStock} out of stock ·{' '}
+            {attentionBreakdown.running} running low
+            {attentionBreakdown.iceZero > 0
+              ? ` · ${attentionBreakdown.iceZero} ice cream at zero`
+              : ''}
+          </p>
+        )}
+        {listFilter === 'out' && totalOutCount > 0 && (
+          <p className="text-[10px] text-center text-muted-foreground leading-snug px-1 -mt-1">
+            {totalOutCount} out of stock · use Need attention to see ice cream at zero
+          </p>
+        )}
+
+        {(showLowOnly || showOutOnly) && (
+          <button
+            type="button"
+            onClick={() => {
+              setRestockMode(v => {
+                const next = !v;
+                if (next) setRestockFocusId(filtered[0]?.id ?? null);
+                else {
+                  setRestockFocusId(null);
+                  setAdvanceFromId(null);
+                }
+                return next;
+              });
+            }}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-xs font-bold transition-colors',
+              restockMode
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-dashed border-border text-muted-foreground active:bg-muted',
+            )}
+          >
+            <Zap className={cn('h-4 w-4', restockMode && 'text-primary')} />
+            {restockMode ? 'Exit restock mode' : 'Start restock mode'}
+          </button>
+        )}
+
         <SearchBar value={search} onChange={setSearch} placeholder="Search items…" />
         <CategoryChips
           selected={category}
@@ -241,7 +473,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* Low Stock info bar */}
       {showLowOnly && filtered.length > 0 && category !== 'all' && (
         <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5">
           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
@@ -299,8 +530,21 @@ export default function Inventory() {
       </div>
 
       {modalItem && (
-        <AddSubtractModal item={modalItem} action={modalAction} onClose={() => setModalItem(null)} />
+        <AddSubtractModal
+          key={`${modalItem.id}-${modalAction}`}
+          item={modalItem}
+          action={modalAction}
+          onClose={() => setModalItem(null)}
+        />
       )}
+
+      <EditItemDialog
+        item={editItem}
+        open={editItem !== null}
+        onOpenChange={open => {
+          if (!open) setEditItem(null);
+        }}
+      />
     </div>
   );
 }

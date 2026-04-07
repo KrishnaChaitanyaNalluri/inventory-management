@@ -12,11 +12,17 @@ export function CategoryChips({ selected, onSelect, counts }: CategoryChipsProps
   const totalCount = counts?.['all'];
 
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none -mx-4 px-4">
+    <div
+      className={cn(
+        'flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none -mx-4 px-4',
+        'snap-x snap-mandatory scroll-smooth touch-pan-x',
+      )}
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       <button
         onClick={() => onSelect('all')}
         className={cn(
-          'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors whitespace-nowrap flex items-center gap-1.5',
+          'snap-start shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors whitespace-nowrap flex items-center gap-1.5',
           selected === 'all'
             ? 'border-primary bg-primary text-white'
             : 'border-border bg-card text-muted-foreground active:bg-muted'
@@ -39,7 +45,7 @@ export function CategoryChips({ selected, onSelect, counts }: CategoryChipsProps
             key={cat}
             onClick={() => onSelect(cat)}
             className={cn(
-              'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors whitespace-nowrap flex items-center gap-1.5',
+              'snap-start shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors whitespace-nowrap flex items-center gap-1.5',
               selected === cat
                 ? 'border-primary bg-primary text-white'
                 : 'border-border bg-card text-muted-foreground active:bg-muted'

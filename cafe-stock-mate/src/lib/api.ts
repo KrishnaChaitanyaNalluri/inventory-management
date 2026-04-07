@@ -8,8 +8,9 @@ import {
   REASON_LABELS,
 } from '@/types/inventory';
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
-  || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+const envApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/$/, '') ?? '';
+/** In dev, omit VITE_API_URL to use Vite proxy `/api` → backend (same origin as the UI). */
+const BASE_URL = envApiUrl || (import.meta.env.DEV ? '/api' : '');
 
 function assertApiUrl(): string {
   if (!BASE_URL) {
@@ -45,14 +46,24 @@ function formatApiErrorDetail(detail: unknown): string {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const base = assertApiUrl();
   const token = getToken();
-  const res = await fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (e) {
+    if (e instanceof TypeError) {
+      throw new Error(
+        'Cannot reach the API. Start the backend on port 8000. In local dev, remove VITE_API_URL from .env so requests use the Vite proxy (/api).',
+      );
+    }
+    throw e;
+  }
 
   if (res.status === 401) {
     clearToken();
@@ -65,7 +76,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error(formatApiErrorDetail(err.detail));
   }
 
-  return res.json() as Promise<T>;
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 // ── Response shapes from backend (snake_case) ─────────────────────────────────
@@ -77,6 +91,7 @@ interface ApiItem {
   sub_category: string | null;
   unit: string;
   current_quantity: number;
+  offsite_quantity: number;
   low_stock_threshold: number;
   storage_location: string | null;
   note: string | null;
@@ -114,6 +129,7 @@ export function mapItem(r: ApiItem): InventoryItem {
     subCategory: r.sub_category ?? undefined,
     unit: r.unit,
     currentQuantity: r.current_quantity,
+    offsiteQuantity: r.offsite_quantity ?? 0,
     lowStockThreshold: r.low_stock_threshold,
     storageLocation: (r.storage_location ?? undefined) as StorageLocation | undefined,
     note: r.note ?? undefined,
@@ -182,6 +198,34 @@ export async function apiUpdateThreshold(itemId: string, threshold: number): Pro
   });
 }
 
+export interface UpdateItemMetadataBody {
+  name: string;
+  unit: string;
+  category: string;
+  sub_category?: string | null;
+  storage_location?: string | null;
+  note?: string | null;
+}
+
+export async function apiUpdateItemMetadata(itemId: string, body: UpdateItemMetadataBody): Promise<InventoryItem> {
+  const row = await request<ApiItem>(`/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  return mapItem(row);
+}
+
+export async function apiAdjustOffsite(
+  itemId: string,
+  body: { action: 'add' | 'subtract'; quantity: number; reason: string; note?: string },
+): Promise<InventoryTransaction> {
+  const row = await request<ApiTransaction>(`/items/${itemId}/adjust-offsite`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  return mapTransaction(row);
+}
+
 // ── Transactions ──────────────────────────────────────────────────────────────
 
 export async function apiGetTransactions(params?: {
@@ -230,4 +274,62 @@ export async function apiUpdateUser(
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+}
+
+export async function apiDeleteUser(userId: string): Promise<void> {
+  await request<void>(`/users/${userId}`, { method: 'DELETE' });
+}
+
+export async function apiCreateItem(body: {
+  name: string;
+  category: string;
+  sub_category?: string;
+  unit: string;
+  current_quantity?: number;
+  low_stock_threshold?: number;
+  storage_location?: string;
+  note?: string;
+}): Promise<InventoryItem> {
+  const row = await request<ApiItem>('/items', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: body.name,
+      category: body.category,
+      sub_category: body.sub_category ?? null,
+      unit: body.unit,
+      current_quantity: body.current_quantity ?? 0,
+      low_stock_threshold: body.low_stock_threshold ?? 1,
+      storage_location: body.storage_location ?? null,
+      note: body.note ?? null,
+    }),
+  });
+  return mapItem(row);
+}
+
+// ── Feedback (bugs / enhancements) ────────────────────────────────────────────
+
+export type FeedbackCategory = 'bug' | 'enhancement';
+
+export interface ApiFeedbackRow {
+  id: string;
+  user_id: string;
+  user_name: string;
+  category: string;
+  message: string;
+  created_at: string;
+}
+
+export async function apiSubmitFeedback(body: {
+  category: FeedbackCategory;
+  message: string;
+}): Promise<ApiFeedbackRow> {
+  // Use /employee-notes (not /feedback) — some browsers/extensions block URLs containing "feedback".
+  return request<ApiFeedbackRow>('/employee-notes', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiListFeedback(limit = 80): Promise<ApiFeedbackRow[]> {
+  return request<ApiFeedbackRow[]>(`/employee-notes?limit=${limit}`);
 }

@@ -9,54 +9,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from schema import SCHEMA, SCHEMA_ALTER
+
+
 def hash_pin(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
-
-# ── Schema ────────────────────────────────────────────────────────────────────
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id            VARCHAR(20)  PRIMARY KEY,
-    name          VARCHAR(100) NOT NULL,
-    email         VARCHAR(150),
-    phone         VARCHAR(20),
-    pin_hash      VARCHAR(255) NOT NULL,
-    role          VARCHAR(20)  NOT NULL DEFAULT 'employee',
-    created_at    TIMESTAMPTZ  DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS inventory_items (
-    id                  VARCHAR(20)  PRIMARY KEY,
-    name                VARCHAR(200) NOT NULL,
-    category            VARCHAR(100) NOT NULL,
-    sub_category        VARCHAR(100),
-    unit                VARCHAR(50)  NOT NULL,
-    current_quantity    INTEGER      NOT NULL DEFAULT 0,
-    low_stock_threshold INTEGER      NOT NULL DEFAULT 1,
-    storage_location    VARCHAR(50),
-    note                TEXT,
-    updated_at          TIMESTAMPTZ  DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS inventory_transactions (
-    id              VARCHAR(40)  PRIMARY KEY,
-    item_id         VARCHAR(20)  REFERENCES inventory_items(id),
-    item_name       VARCHAR(200) NOT NULL,
-    unit            VARCHAR(50)  NOT NULL,
-    action          VARCHAR(20)  NOT NULL,
-    quantity        INTEGER      NOT NULL,
-    reason          VARCHAR(50)  NOT NULL,
-    note            TEXT,
-    employee_id     VARCHAR(20)  REFERENCES users(id),
-    employee_name   VARCHAR(100) NOT NULL,
-    timestamp       TIMESTAMPTZ  DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_items_category    ON inventory_items(category);
-CREATE INDEX IF NOT EXISTS idx_tx_item_id        ON inventory_transactions(item_id);
-CREATE INDEX IF NOT EXISTS idx_tx_timestamp      ON inventory_transactions(timestamp DESC);
-"""
 
 # ── Seed Data ─────────────────────────────────────────────────────────────────
 
@@ -162,7 +120,7 @@ ITEMS = [
     ("85",  "Dark Chocolate Sauce",           "Coffee Ingredients", "Mocha Sauces",      "bottles",    7, 2, "front_counter", None),
     ("86",  "Caramel Sauce (Ghiradelli)",     "Coffee Ingredients", "Mocha Sauces",      "bottles",    5, 2, "front_counter", None),
     ("87",  "Pumpkin Pie Sauce",              "Coffee Ingredients", "Mocha Sauces",      "bottles",    1, 1, "storage_room",  None),
-    ("88",  "Condensed Milk",                 "Coffee Ingredients", "Special Syrups",    "tins",      30, 5, "storage_room",  None),
+    ("88",  "Condensed Milk",                 "Milk & Dairy Alternatives", "Pantry",            "tins",      30, 5, "storage_room",  None),
     ("89",  "Date Syrup",                     "Coffee Ingredients", "Special Syrups",    "bottles",    5, 2, "storage_room",  None),
     ("90",  "Raw Honey",                      "Coffee Ingredients", "Special Syrups",    "bottles",    3, 1, "storage_room",  None),
     ("91",  "Tonic Water",                    "Coffee Ingredients", "Special Syrups",    "bottles",    1, 2, "storage_room",  None),
@@ -170,11 +128,11 @@ ITEMS = [
     ("93",  "Cardamom Powder",                "Coffee Ingredients", "Spice Powders",     "containers", 4, 1, "storage_room",  None),
     ("94",  "Pumpkin Spice Powder",           "Coffee Ingredients", "Spice Powders",     "containers", 1, 1, "storage_room",  None),
     ("95",  "Cinnamon Sugar",                 "Coffee Ingredients", "Spice Powders",     "containers", 2, 1, "storage_room",  None),
-    ("96",  "Half & Half",                    "Coffee Ingredients", "Creamers",          "boxes",      1, 2, "fridge",        None),
-    ("97",  "Delight – Hazelnut Creamer",     "Coffee Ingredients", "Creamers",          "boxes",      1, 1, "fridge",        None),
-    ("98",  "Delight – French Vanilla Creamer","Coffee Ingredients","Creamers",          "boxes",      0, 1, "fridge",        None),
-    ("99",  "Delight – Caramel Macchiato Creamer","Coffee Ingredients","Creamers",       "boxes",      0, 1, "fridge",        None),
-    ("100", "Coffee Mate Creamer",            "Coffee Ingredients", "Creamers",          "boxes",      1, 1, "storage_room",  None),
+    ("96",  "Half & Half",                    "Milk & Dairy Alternatives", "Creamers",          "boxes",      1, 2, "fridge",        None),
+    ("97",  "Delight – Hazelnut Creamer",     "Milk & Dairy Alternatives", "Creamers",          "boxes",      1, 1, "fridge",        None),
+    ("98",  "Delight – French Vanilla Creamer","Milk & Dairy Alternatives","Creamers",          "boxes",      0, 1, "fridge",        None),
+    ("99",  "Delight – Caramel Macchiato Creamer","Milk & Dairy Alternatives","Creamers",       "boxes",      0, 1, "fridge",        None),
+    ("100", "Coffee Mate Creamer",            "Milk & Dairy Alternatives", "Creamers",          "boxes",      1, 1, "storage_room",  None),
 
     # ── Sweeteners ────────────────────────────────────────────────────────────
     ("101", "Brown Sugar (Packets)", "Sweeteners", None, "boxes", 0, 1, "front_counter", None),
@@ -328,6 +286,18 @@ ITEMS = [
     ("239", "Caramelized Pineapple",       "Ice Creams", None, "tubs", 0, 1, "freezer", None),
     ("240", "Sitapal",                     "Ice Creams", None, "tubs", 0, 1, "freezer", None),
     ("241", "Red Guava",                   "Ice Creams", None, "tubs", 0, 1, "freezer", None),
+
+    # ── Milk & Dairy Alternatives (pourable + plant milks; also see 88, 96–100 above) ──
+    ("242", "Whole milk (½ gal)",              "Milk & Dairy Alternatives", "Dairy",       "half gallons", 6,  2, "fridge", None),
+    ("243", "1% milk",                         "Milk & Dairy Alternatives", "Dairy",       "half gallons", 3,  2, "fridge", None),
+    ("244", "2% milk",                         "Milk & Dairy Alternatives", "Dairy",       "half gallons", 6,  2, "fridge", None),
+    ("245", "Heavy cream",                     "Milk & Dairy Alternatives", "Dairy",       "containers",   4,  2, "fridge", None),
+    ("246", "Oat milk – Chobani (original)",   "Milk & Dairy Alternatives", "Plant milks", "half gallons", 3,  2, "fridge", None),
+    ("247", "Oat milk – Chobani Extra Creamy", "Milk & Dairy Alternatives", "Plant milks", "half gallons", 13, 3, "fridge", None),
+    ("248", "Soy milk",                        "Milk & Dairy Alternatives", "Plant milks", "half gallons", 10, 3, "fridge", None),
+    ("249", "Almond milk",                     "Milk & Dairy Alternatives", "Plant milks", "half gallons", 3,  2, "fridge", None),
+    ("250", "Coconut milk",                    "Milk & Dairy Alternatives", "Plant milks", "half gallons", 11, 3, "fridge", None),
+    ("251", "Coconut water",                   "Milk & Dairy Alternatives", "Plant milks", "containers",   12, 3, "fridge", None),
 ]
 
 
@@ -343,6 +313,7 @@ def run():
 
     print("Creating tables...")
     cur.execute(SCHEMA)
+    cur.execute(SCHEMA_ALTER)
 
     print("Seeding users...")
     for uid, name, email, phone, plain_pin, role in USERS:

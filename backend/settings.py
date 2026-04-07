@@ -36,6 +36,21 @@ else:
     ]
 
 
+# Login throttling (sliding window). Enabled automatically in production unless opted out.
+_LOGIN_RATE_RAW = os.getenv("LOGIN_RATE_ENABLED", "").strip().lower()
+if _LOGIN_RATE_RAW in ("0", "false", "no", "off"):
+    LOGIN_RATE_ENABLED = False
+elif _LOGIN_RATE_RAW in ("1", "true", "yes", "on"):
+    LOGIN_RATE_ENABLED = True
+else:
+    LOGIN_RATE_ENABLED = IS_PRODUCTION
+
+LOGIN_RATE_PER_ID_MAX = max(3, min(500, int(os.getenv("LOGIN_RATE_PER_ID_MAX", "12"))))
+LOGIN_RATE_PER_ID_WINDOW_SEC = max(60, min(86400, int(os.getenv("LOGIN_RATE_PER_ID_WINDOW_SEC", "900"))))
+LOGIN_RATE_PER_IP_MAX = max(5, min(2000, int(os.getenv("LOGIN_RATE_PER_IP_MAX", "45"))))
+LOGIN_RATE_PER_IP_WINDOW_SEC = max(60, min(86400, int(os.getenv("LOGIN_RATE_PER_IP_WINDOW_SEC", "300"))))
+
+
 _FORBIDDEN_JWT_SECRETS = frozenset(
     {
         "change-me",

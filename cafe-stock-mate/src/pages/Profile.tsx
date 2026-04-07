@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useInventory } from '@/context/InventoryContext';
 import { useAuth } from '@/context/AuthContext';
-import { LogOut, Shield, User, Package, ClipboardList, AlertTriangle, Crown, Users } from 'lucide-react';
-import { canEditThreshold } from '@/types/inventory';
+import { LogOut, Shield, User, Package, ClipboardList, AlertTriangle, Crown, Users, PlusCircle } from 'lucide-react';
+import { canAddInventoryItems, canEditThreshold } from '@/types/inventory';
 
 /** Staff: everyone logged in. Manager extra: only role manager. */
 const STAFF_PILLS: { label: string }[] = [
@@ -31,6 +31,7 @@ export default function Profile() {
   const todayCount = transactions.filter(t => new Date(t.timestamp).toDateString() === todayStr).length;
 
   const isManager = canEditThreshold(currentUser.role);
+  const canAddSku = canAddInventoryItems(currentUser.role);
   const isAdmin = currentUser.role === 'admin';
 
   return (
@@ -128,6 +129,16 @@ export default function Profile() {
                   </span>
                 ))}
               </div>
+              {canAddSku && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/inventory/add')}
+                  className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm font-semibold text-primary active:bg-primary/10 transition-colors"
+                >
+                  <PlusCircle className="h-5 w-5 shrink-0" />
+                  Add new inventory item
+                </button>
+              )}
             </>
           )}
 
