@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Minus, Bell, Warehouse, ShoppingCart, Trash2, X } from 'lucide-react';
+import { Plus, Minus, Bell, Warehouse, ShoppingCart, Trash2, X, PackagePlus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useInventory } from '@/context/InventoryContext';
@@ -8,6 +8,16 @@ import { REASON_LABELS, ActionType, canEditThreshold } from '@/types/inventory';
 import { cn } from '@/lib/utils';
 import { clearPurchaseDraft, removeFromPurchaseDraft } from '@/lib/inventoryHelpers';
 import { usePurchaseDraftRows } from '@/hooks/usePurchaseDraft';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -40,6 +50,7 @@ export default function ActivityLog() {
   const canUsePurchaseList = canEditThreshold(currentUser?.role);
   const { transactions } = useInventory();
   const [filterAction, setFilterAction] = useState<LogFilter>('all');
+  const [clearListOpen, setClearListOpen] = useState(false);
   const purchaseRows = usePurchaseDraftRows();
 
   const tab: ActivityTab =
@@ -166,9 +177,19 @@ export default function ActivityLog() {
         )}
 
         {tab === 'purchase' && (
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            For your ordering run — not synced to inventory or a vendor. Cleared when you close this browser tab.
-          </p>
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              For your ordering run — not synced to inventory or a vendor. Cleared when you close this browser tab.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/inventory/add?from=purchase')}
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/40 bg-card py-2.5 text-xs font-semibold text-primary active:bg-muted"
+            >
+              <PackagePlus className="h-3.5 w-3.5 shrink-0" />
+              Add new inventory item
+            </button>
+          </div>
         )}
       </div>
 
@@ -290,9 +311,7 @@ export default function ActivityLog() {
                 type="button"
                 onClick={() => {
                   if (purchaseRows.length === 0) return;
-                  if (!window.confirm('Clear everything from your to-order list?')) return;
-                  clearPurchaseDraft();
-                  toast.success('To-order list cleared');
+                  setClearListOpen(true);
                 }}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 py-3 text-sm font-semibold text-destructive active:bg-destructive/10"
               >
@@ -303,6 +322,30 @@ export default function ActivityLog() {
           )}
         </div>
       )}
+
+      <AlertDialog open={clearListOpen} onOpenChange={setClearListOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear to-order list?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every line will be removed from this list. You can add items again from inventory or Home.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                clearPurchaseDraft();
+                toast.success('To-order list cleared');
+                setClearListOpen(false);
+              }}
+            >
+              Clear list
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

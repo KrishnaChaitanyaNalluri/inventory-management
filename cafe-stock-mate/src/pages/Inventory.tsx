@@ -11,6 +11,7 @@ import { AddSubtractModal } from '@/components/AddSubtractModal';
 import { EditItemDialog } from '@/components/EditItemDialog';
 import { cn } from '@/lib/utils';
 import { buildLastStockEditMap } from '@/lib/inventoryHelpers';
+import { useAddToPurchaseList } from '@/hooks/useAddToPurchaseList';
 import {
   InventoryItem,
   ActionType,
@@ -61,6 +62,7 @@ export default function Inventory() {
   const { currentUser } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const addToPurchaseList = useAddToPurchaseList();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [subCategory, setSubCategory] = useState<string | 'all'>('all');
@@ -274,6 +276,7 @@ export default function Inventory() {
       onOpenAdjust={(i, action) => openModal(i, action)}
       onThresholdChange={handleThreshold}
       onEditDetails={isManager ? i => setEditItem(i) : undefined}
+      onAddToPurchaseList={isManager ? addToPurchaseList : undefined}
       restockFocus={restockMode && restockFocusId === item.id}
       lastStockEdit={lastStockEditMap[item.id] ?? null}
     />

@@ -24,7 +24,7 @@ function formatWhen(iso: string) {
 
 export default function Feedback() {
   const { currentUser } = useAuth();
-  const isLead = canEditThreshold(currentUser?.role);
+  const isManagerOrAdmin = canEditThreshold(currentUser?.role);
 
   const [category, setCategory] = useState<FeedbackCategory>('bug');
   const [message, setMessage] = useState('');
@@ -33,7 +33,7 @@ export default function Feedback() {
   const [loadingList, setLoadingList] = useState(false);
 
   const loadList = useCallback(async () => {
-    if (!isLead) return;
+    if (!isManagerOrAdmin) return;
     setLoadingList(true);
     try {
       const rows = await apiListFeedback(80);
@@ -43,7 +43,7 @@ export default function Feedback() {
     } finally {
       setLoadingList(false);
     }
-  }, [isLead]);
+  }, [isManagerOrAdmin]);
 
   useEffect(() => {
     loadList();
@@ -69,7 +69,8 @@ export default function Feedback() {
       <div className="bg-primary px-4 pt-6 pb-10 rounded-b-[1.75rem] shadow-sm">
         <h1 className="text-lg font-bold text-white">Feedback</h1>
         <p className="text-sm text-white/80 mt-1 max-w-md">
-          Report a bug or suggest an improvement. Managers see all submissions below.
+          Report a bug or suggest an improvement.
+          {isManagerOrAdmin ? ' You can review all team notes below.' : ''}
         </p>
       </div>
 
@@ -135,7 +136,7 @@ export default function Feedback() {
           </Button>
         </form>
 
-        {isLead && (
+        {isManagerOrAdmin && (
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <h2 className="text-sm font-bold text-foreground mb-3">Team submissions</h2>
             {loadingList ? (

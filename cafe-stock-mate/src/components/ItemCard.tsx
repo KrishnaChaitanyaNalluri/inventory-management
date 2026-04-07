@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Bell, Minus, Pencil, Plus } from 'lucide-react';
+import { Bell, Minus, Pencil, Plus, ShoppingCart } from 'lucide-react';
 import { InventoryItem } from '@/types/inventory';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/inventoryHelpers';
@@ -11,8 +11,10 @@ interface ItemCardProps {
   /** Opens full form (delivery, larger counts, other reasons). */
   onOpenAdjust: (item: InventoryItem, action: 'add' | 'subtract') => void;
   onThresholdChange?: (item: InventoryItem, threshold: number) => void;
-  /** Managers/admins — open edit name / unit / category */
+  /** Managers/admins only — open edit name / unit / category */
   onEditDetails?: (item: InventoryItem) => void;
+  /** Managers/admins only — same gate as onEditDetails; session to-order list */
+  onAddToPurchaseList?: (item: InventoryItem) => void;
   /** Restock mode: current “focus” row for faster scanning */
   restockFocus?: boolean;
   /** From activity log — latest stock change for this item */
@@ -33,6 +35,7 @@ export function ItemCard({
   onOpenAdjust,
   onThresholdChange,
   onEditDetails,
+  onAddToPurchaseList,
   restockFocus,
   lastStockEdit,
 }: ItemCardProps) {
@@ -105,6 +108,21 @@ export function ItemCard({
               title="Edit name, unit, category"
             >
               <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {/* Only with edit — both are passed together for manager/admin from Inventory & Home */}
+          {onEditDetails && onAddToPurchaseList && (
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                onAddToPurchaseList(item);
+              }}
+              className="shrink-0 rounded-lg border border-primary/35 bg-primary/5 p-1.5 text-primary active:bg-primary/10"
+              aria-label={`Add ${item.name} to purchase list`}
+              title="Add to purchase list"
+            >
+              <ShoppingCart className="h-3.5 w-3.5" />
             </button>
           )}
           {isOut && (

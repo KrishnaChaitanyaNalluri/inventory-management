@@ -426,6 +426,17 @@ def update_item_metadata(item_id: str, body: UpdateInventoryItemMetadataRequest,
     )
 
 
+@app.delete("/items/{item_id}", status_code=204)
+def delete_item(item_id: str, _user=Depends(require_manager)):
+    """Remove SKU and its stock history rows (transactions reference this item)."""
+    with get_cursor() as cur:
+        cur.execute("SELECT id FROM inventory_items WHERE id = %s", (item_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Item not found")
+        cur.execute("DELETE FROM inventory_transactions WHERE item_id = %s", (item_id,))
+        cur.execute("DELETE FROM inventory_items WHERE id = %s", (item_id,))
+
+
 @app.post("/items/{item_id}/adjust", response_model=TransactionResponse)
 def adjust_item(item_id: str, body: AdjustQuantityRequest, user=Depends(get_current_user)):
     if body.action not in ("add", "subtract"):

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useInventory } from '@/context/InventoryContext';
 import { apiCreateItem } from '@/lib/api';
+import { addToPurchaseDraft } from '@/lib/inventoryHelpers';
 import { CATEGORIES, Category, StorageLocation, canAddInventoryItems } from '@/types/inventory';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,8 @@ const LOCATIONS: { value: StorageLocation; label: string }[] = [
 
 export default function AddInventoryItem() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromPurchase = searchParams.get('from') === 'purchase';
   const { currentUser } = useAuth();
   const { refresh } = useInventory();
   const allowed = canAddInventoryItems(currentUser?.role);
@@ -65,7 +68,7 @@ export default function AddInventoryItem() {
     }
     setSaving(true);
     try {
-      await apiCreateItem({
+      const created = await apiCreateItem({
         name: name.trim(),
         category,
         sub_category: subCategory.trim() || undefined,
@@ -77,7 +80,12 @@ export default function AddInventoryItem() {
       });
       toast.success('Item created');
       await refresh();
-      navigate('/inventory');
+      if (fromPurchase) {
+        addToPurchaseDraft({ id: created.id, name: created.name });
+        navigate('/activity?tab=purchase');
+      } else {
+        navigate('/inventory');
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not create item');
     } finally {
@@ -91,7 +99,10 @@ export default function AddInventoryItem() {
         <div className="flex items-center gap-3 mb-2">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (fromPurchase) navigate('/activity?tab=purchase');
+              else navigate(-1);
+            }}
             className="rounded-full p-2 text-white/90 hover:bg-white/10 transition-colors"
             aria-label="Back"
           >
@@ -100,7 +111,9 @@ export default function AddInventoryItem() {
           <h1 className="text-lg font-bold text-white flex-1">Add inventory item</h1>
         </div>
         <p className="text-xs text-white/80 pl-11">
-          New SKU appears in the main list. Set starting count and low-stock alert here.
+          {fromPurchase
+            ? 'Creates the SKU and returns you to To order — the new line is added to your list automatically.'
+            : 'New SKU appears in the main list. Set starting count and low-stock alert here.'}
         </p>
       </div>
 

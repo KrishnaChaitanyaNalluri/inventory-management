@@ -215,6 +215,10 @@ export async function apiUpdateItemMetadata(itemId: string, body: UpdateItemMeta
   return mapItem(row);
 }
 
+export async function apiDeleteItem(itemId: string): Promise<void> {
+  await request<void>(`/items/${itemId}`, { method: 'DELETE' });
+}
+
 export async function apiAdjustOffsite(
   itemId: string,
   body: { action: 'add' | 'subtract'; quantity: number; reason: string; note?: string },

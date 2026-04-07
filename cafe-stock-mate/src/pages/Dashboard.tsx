@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,7 +16,8 @@ import { ItemCard } from '@/components/ItemCard';
 import { AddSubtractModal } from '@/components/AddSubtractModal';
 import { EditItemDialog } from '@/components/EditItemDialog';
 import { cn } from '@/lib/utils';
-import { addToPurchaseDraft, buildLastStockEditMap } from '@/lib/inventoryHelpers';
+import { buildLastStockEditMap } from '@/lib/inventoryHelpers';
+import { useAddToPurchaseList } from '@/hooks/useAddToPurchaseList';
 import { usePurchaseDraftCount } from '@/hooks/usePurchaseDraft';
 import { InventoryItem, ActionType, InventoryTransaction, canEditThreshold, isTrueOutOfStock } from '@/types/inventory';
 
@@ -101,6 +101,7 @@ export default function Dashboard() {
   );
 
   const purchaseDraftCount = usePurchaseDraftCount();
+  const addToPurchaseList = useAddToPurchaseList();
 
   const lastStockEditMap = useMemo(() => buildLastStockEditMap(transactions), [transactions]);
 
@@ -157,6 +158,7 @@ export default function Dashboard() {
                   onOpenAdjust={(i, action) => openModal(i, action)}
                   onThresholdChange={handleThreshold}
                   onEditDetails={isManager ? i => setEditItem(i) : undefined}
+                  onAddToPurchaseList={isManager ? addToPurchaseList : undefined}
                   lastStockEdit={lastStockEditMap[item.id] ?? null}
                 />
               ))}
@@ -244,24 +246,7 @@ export default function Dashboard() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          const ok = addToPurchaseDraft({ id: h.itemId, name: h.name });
-                          if (ok) {
-                            toast.success(`Added “${h.name}” to your to-order list`, {
-                              action: {
-                                label: 'View',
-                                onClick: () => navigate('/activity?tab=purchase'),
-                              },
-                            });
-                          } else {
-                            toast.info('Already on your to-order list', {
-                              action: {
-                                label: 'View',
-                                onClick: () => navigate('/activity?tab=purchase'),
-                              },
-                            });
-                          }
-                        }}
+                        onClick={() => addToPurchaseList({ id: h.itemId, name: h.name })}
                         className="rounded-lg border border-primary/40 bg-card px-2.5 py-1 text-[11px] font-semibold text-primary active:bg-muted"
                       >
                         Add to purchase list
@@ -333,6 +318,7 @@ export default function Dashboard() {
                           onOpenAdjust={(i, action) => openModal(i, action)}
                           onThresholdChange={handleThreshold}
                           onEditDetails={isManager ? i => setEditItem(i) : undefined}
+                          onAddToPurchaseList={isManager ? addToPurchaseList : undefined}
                           lastStockEdit={lastStockEditMap[item.id] ?? null}
                         />
                       ))}
@@ -382,6 +368,7 @@ export default function Dashboard() {
                   onOpenAdjust={(i, action) => openModal(i, action)}
                   onThresholdChange={handleThreshold}
                   onEditDetails={isManager ? i => setEditItem(i) : undefined}
+                  onAddToPurchaseList={isManager ? addToPurchaseList : undefined}
                   lastStockEdit={lastStockEditMap[item.id] ?? null}
                 />
               ))}

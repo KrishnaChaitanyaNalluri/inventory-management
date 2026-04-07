@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { useInventory } from '@/context/InventoryContext';
 import { InventoryItem, CATEGORIES, StorageLocation } from '@/types/inventory';
 import {
@@ -21,6 +21,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const LOCATIONS: { value: StorageLocation; label: string }[] = [
   { value: 'storage_room', label: 'Storage' },
@@ -38,7 +47,7 @@ interface EditItemDialogProps {
 }
 
 export function EditItemDialog({ item, open, onOpenChange }: EditItemDialogProps) {
-  const { updateItemMetadata } = useInventory();
+  const { updateItemMetadata, deleteItem } = useInventory();
   const [name, setName] = useState('');
   const [unit, setUnit] = useState('');
   const [category, setCategory] = useState<string>('');
@@ -46,6 +55,8 @@ export function EditItemDialog({ item, open, onOpenChange }: EditItemDialogProps
   const [locationKey, setLocationKey] = useState<string>(LOC_NONE);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const categoryOptions = useMemo(() => {
     if (!item) return [...CATEGORIES];
@@ -65,6 +76,25 @@ export function EditItemDialog({ item, open, onOpenChange }: EditItemDialogProps
     setLocationKey(item.storageLocation ?? LOC_NONE);
     setNote(item.note ?? '');
   }, [item, open]);
+
+  useEffect(() => {
+    if (!open) setDeleteOpen(false);
+  }, [open]);
+
+  async function handleDelete() {
+    if (!item) return;
+    setDeleting(true);
+    try {
+      await deleteItem(item.id);
+      toast.success('Item removed from catalog');
+      setDeleteOpen(false);
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete item');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -95,6 +125,7 @@ export function EditItemDialog({ item, open, onOpenChange }: EditItemDialogProps
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <form onSubmit={handleSubmit}>
@@ -172,7 +203,43 @@ export function EditItemDialog({ item, open, onOpenChange }: EditItemDialogProps
             </Button>
           </DialogFooter>
         </form>
+
+        <div className="border-t border-border pt-4 mt-2 px-6 pb-2">
+          <p className="text-[11px] text-muted-foreground mb-2">
+            Remove this SKU permanently. Stock history for this line is deleted too (activity log entries for this item
+            disappear).
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+            disabled={saving || deleting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete item
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete &ldquo;{item?.name}&rdquo;?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This cannot be undone. The item and all recorded moves for it will be removed.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
+            {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Delete
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

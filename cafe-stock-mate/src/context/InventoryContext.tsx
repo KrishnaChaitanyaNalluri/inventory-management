@@ -8,6 +8,7 @@ import {
   apiUpdateThreshold,
   apiAdjustOffsite,
   apiUpdateItemMetadata,
+  apiDeleteItem,
   UpdateItemMetadataBody,
 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -118,6 +119,12 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     setItems(prev => prev.map(i => (i.id === itemId ? updated : i)));
   }, []);
 
+  const deleteItem = useCallback(async (itemId: string) => {
+    await apiDeleteItem(itemId);
+    setItems(prev => prev.filter(i => i.id !== itemId));
+    setTransactions(prev => prev.filter(t => t.itemId !== itemId));
+  }, []);
+
   const adjustOffsite = useCallback(async (
     itemId: string,
     action: 'add' | 'subtract',
@@ -158,7 +165,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   return (
     <InventoryContext.Provider value={{
       items, transactions, isLoading, error,
-      addTransaction, quickAdjust, updateThreshold, updateItemMetadata, adjustOffsite, getItem, getLowStockItems, getRecentItems, searchItems,
+      addTransaction, quickAdjust, updateThreshold, updateItemMetadata, deleteItem, adjustOffsite, getItem, getLowStockItems, getRecentItems, searchItems,
       refresh: loadAll,
     }}>
       {children}
