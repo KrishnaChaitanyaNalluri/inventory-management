@@ -88,3 +88,5 @@ def validate_settings() -> None:
     else:
         for e in errors:
             print(f"[WARN] {e}", file=sys.stderr)
+
+# chore: noop (backend deploy / CI marker)
