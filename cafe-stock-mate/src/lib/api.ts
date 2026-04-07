@@ -66,9 +66,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (res.status === 401) {
-    clearToken();
-    window.location.reload();
-    throw new Error('Session expired');
+    const errJson = await res.json().catch(() => ({ detail: 'Unauthorized' }));
+    const detail = formatApiErrorDetail(errJson.detail);
+    const isLoginFailure =
+      path === '/auth/login' ||
+      path.endsWith('/auth/login');
+    if (!isLoginFailure) {
+      clearToken();
+      localStorage.removeItem('dumont_user');
+      window.location.reload();
+      throw new Error('Session expired');
+    }
+    throw new Error(detail || 'Invalid credentials');
   }
 
   if (!res.ok) {

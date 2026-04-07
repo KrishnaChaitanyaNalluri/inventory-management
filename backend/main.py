@@ -131,11 +131,30 @@ def split_login_identifier(identifier: str) -> tuple[Optional[str], Optional[str
 
 @app.post("/auth/login", response_model=LoginResponse)
 def login(body: LoginRequest):
+    raw_id = (body.identifier or "").strip()
+    if not raw_id:
+        raise HTTPException(status_code=400, detail="identifier is required")
+
     with get_cursor() as cur:
-        cur.execute(
-            "SELECT id, name, role, pin_hash FROM users WHERE phone = %s OR email = %s",
-            (body.identifier, body.identifier),
-        )
+        if "@" in raw_id:
+            cur.execute(
+                "SELECT id, name, role, pin_hash FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(%s))",
+                (raw_id,),
+            )
+        else:
+            digits = "".join(c for c in raw_id if c.isdigit())
+            if digits:
+                cur.execute(
+                    """SELECT id, name, role, pin_hash FROM users
+                       WHERE phone = %s OR email = %s
+                          OR REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g') = %s""",
+                    (raw_id, raw_id, digits),
+                )
+            else:
+                cur.execute(
+                    "SELECT id, name, role, pin_hash FROM users WHERE phone = %s OR email = %s",
+                    (raw_id, raw_id),
+                )
         row = cur.fetchone()
 
     if not row:
