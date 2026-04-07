@@ -23,6 +23,7 @@ from models import (
     CreateInventoryItemRequest,
     UpdateInventoryItemMetadataRequest,
     InventoryItemResponse,
+    ReorderItemsRequest,
     AdjustQuantityRequest,
     UpdateThresholdRequest,
     TransactionResponse,
@@ -31,6 +32,23 @@ from models import (
 )
 
 ALLOWED_ROLES = frozenset({"employee", "manager", "admin"})
+
+
+def _item_row_to_response(row) -> InventoryItemResponse:
+    return InventoryItemResponse(
+        id=row[0],
+        name=row[1],
+        category=row[2],
+        sub_category=row[3],
+        unit=row[4],
+        current_quantity=row[5],
+        offsite_quantity=row[6],
+        low_stock_threshold=row[7],
+        storage_location=row[8],
+        note=row[9],
+        updated_at=row[10],
+        sort_order=row[11],
+    )
 
 
 @asynccontextmanager
@@ -315,7 +333,7 @@ def list_items(
     low_stock: Optional[bool] = Query(None),
     user=Depends(get_current_user),
 ):
-    sql = "SELECT id, name, category, sub_category, unit, current_quantity, offsite_quantity, low_stock_threshold, storage_location, note, updated_at FROM inventory_items WHERE 1=1"
+    sql = "SELECT id, name, category, sub_category, unit, current_quantity, offsite_quantity, low_stock_threshold, storage_location, note, updated_at, sort_order FROM inventory_items WHERE 1=1"
     params: list = []
 
     if category:
@@ -330,34 +348,63 @@ def list_items(
     if low_stock:
         sql += " AND current_quantity <= low_stock_threshold"
 
-    sql += " ORDER BY category, sub_category NULLS FIRST, name"
+    sql += " ORDER BY category, sub_category NULLS FIRST, sort_order, name"
 
     with get_cursor() as cur:
         cur.execute(sql, params)
         rows = cur.fetchall()
 
-    return [InventoryItemResponse(
-        id=r[0], name=r[1], category=r[2], sub_category=r[3],
-        unit=r[4], current_quantity=r[5], offsite_quantity=r[6], low_stock_threshold=r[7],
-        storage_location=r[8], note=r[9], updated_at=r[10],
-    ) for r in rows]
+    return [_item_row_to_response(r) for r in rows]
 
 
 @app.get("/items/{item_id}", response_model=InventoryItemResponse)
 def get_item(item_id: str, user=Depends(get_current_user)):
     with get_cursor() as cur:
         cur.execute(
-            "SELECT id, name, category, sub_category, unit, current_quantity, offsite_quantity, low_stock_threshold, storage_location, note, updated_at FROM inventory_items WHERE id = %s",
+            "SELECT id, name, category, sub_category, unit, current_quantity, offsite_quantity, low_stock_threshold, storage_location, note, updated_at, sort_order FROM inventory_items WHERE id = %s",
             (item_id,),
         )
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Item not found")
-    return InventoryItemResponse(
-        id=row[0], name=row[1], category=row[2], sub_category=row[3],
-        unit=row[4], current_quantity=row[5], offsite_quantity=row[6], low_stock_threshold=row[7],
-        storage_location=row[8], note=row[9], updated_at=row[10],
-    )
+    return _item_row_to_response(row)
+
+
+@app.patch("/items/reorder")
+def reorder_items_group(body: ReorderItemsRequest, _user=Depends(require_manager)):
+    ids = [str(x).strip() for x in body.item_ids if str(x).strip()]
+    if len(ids) != len(body.item_ids):
+        raise HTTPException(status_code=400, detail="item_ids must be non-empty strings")
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="Duplicate item_ids")
+
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id, category, sub_category FROM inventory_items WHERE id = ANY(%s)",
+            (ids,),
+        )
+        rows = cur.fetchall()
+
+    if len(rows) != len(ids):
+        raise HTTPException(status_code=400, detail="One or more items not found")
+
+    by_id = {r[0]: r for r in rows}
+    cats = {by_id[i][1] for i in ids}
+    subs = {by_id[i][2] for i in ids}
+    if len(cats) > 1 or len(subs) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="All items must share the same category and sub-category",
+        )
+
+    with get_cursor() as cur:
+        for pos, item_id in enumerate(ids):
+            cur.execute(
+                "UPDATE inventory_items SET sort_order = %s WHERE id = %s",
+                (pos, item_id),
+            )
+
+    return {"ok": True}
 
 
 @app.post("/items", response_model=InventoryItemResponse)
@@ -433,16 +480,12 @@ def update_item_metadata(item_id: str, body: UpdateInventoryItemMetadataRequest,
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Item not found")
         cur.execute(
-            "SELECT id, name, category, sub_category, unit, current_quantity, offsite_quantity, low_stock_threshold, storage_location, note, updated_at FROM inventory_items WHERE id = %s",
+            "SELECT id, name, category, sub_category, unit, current_quantity, offsite_quantity, low_stock_threshold, storage_location, note, updated_at, sort_order FROM inventory_items WHERE id = %s",
             (item_id,),
         )
         row = cur.fetchone()
 
-    return InventoryItemResponse(
-        id=row[0], name=row[1], category=row[2], sub_category=row[3],
-        unit=row[4], current_quantity=row[5], offsite_quantity=row[6], low_stock_threshold=row[7],
-        storage_location=row[8], note=row[9], updated_at=row[10],
-    )
+    return _item_row_to_response(row)
 
 
 @app.delete("/items/{item_id}", status_code=204)

@@ -52,6 +52,13 @@ class InventoryItemResponse(BaseModel):
     storage_location: Optional[str]
     note: Optional[str]
     updated_at: datetime
+    sort_order: int = 0
+
+
+class ReorderItemsRequest(BaseModel):
+    """New order for one sub-category group (same category + sub_category)."""
+
+    item_ids: list[str] = Field(min_length=1)
 
 
 class AdjustQuantityRequest(BaseModel):

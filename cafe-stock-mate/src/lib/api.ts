@@ -105,6 +105,7 @@ interface ApiItem {
   storage_location: string | null;
   note: string | null;
   updated_at: string;
+  sort_order?: number;
 }
 
 interface ApiTransaction {
@@ -143,6 +144,7 @@ export function mapItem(r: ApiItem): InventoryItem {
     storageLocation: (r.storage_location ?? undefined) as StorageLocation | undefined,
     note: r.note ?? undefined,
     updatedAt: r.updated_at,
+    sortOrder: r.sort_order ?? 0,
   };
 }
 
@@ -172,6 +174,13 @@ export async function apiLogin(identifier: string, pin: string): Promise<ApiLogi
 }
 
 // ── Items ─────────────────────────────────────────────────────────────────────
+
+export async function apiReorderItems(itemIds: string[]): Promise<void> {
+  await request<{ ok: boolean }>('/items/reorder', {
+    method: 'PATCH',
+    body: JSON.stringify({ item_ids: itemIds }),
+  });
+}
 
 export async function apiGetItems(params?: {
   category?: string;

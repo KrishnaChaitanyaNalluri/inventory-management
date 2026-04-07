@@ -9,6 +9,7 @@ import {
   apiAdjustOffsite,
   apiUpdateItemMetadata,
   apiDeleteItem,
+  apiReorderItems,
   UpdateItemMetadataBody,
 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -36,6 +37,8 @@ interface InventoryContextType {
   getRecentItems: () => InventoryItem[];
   searchItems: (query: string) => InventoryItem[];
   refresh: () => Promise<void>;
+  /** Managers — persist order within one sub-category group */
+  reorderSubcategoryGroup: (orderedItemIds: string[]) => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | null>(null);
@@ -162,11 +165,17 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     return items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
   }, [items]);
 
+  const reorderSubcategoryGroup = useCallback(async (orderedItemIds: string[]) => {
+    await apiReorderItems(orderedItemIds);
+    await loadAll();
+  }, [loadAll]);
+
   return (
     <InventoryContext.Provider value={{
       items, transactions, isLoading, error,
       addTransaction, quickAdjust, updateThreshold, updateItemMetadata, deleteItem, adjustOffsite, getItem, getLowStockItems, getRecentItems, searchItems,
       refresh: loadAll,
+      reorderSubcategoryGroup,
     }}>
       {children}
     </InventoryContext.Provider>

@@ -56,4 +56,5 @@ CREATE INDEX IF NOT EXISTS idx_feedback_created  ON app_feedback(created_at DESC
 # Column added after initial deploy — run on every API boot (IF NOT EXISTS).
 SCHEMA_ALTER = """
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS offsite_quantity INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 """

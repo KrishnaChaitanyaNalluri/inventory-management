@@ -17,6 +17,11 @@ export function canManageOffsiteStorage(role: UserRole | undefined): boolean {
   return role === 'manager' || role === 'admin';
 }
 
+/** Drag-to-reorder on inventory lists — managers and admins only (matches PATCH /items/reorder). */
+export function canReorderInventoryItems(role: UserRole | undefined): boolean {
+  return canEditThreshold(role);
+}
+
 export type ActionType = 'add' | 'subtract' | 'set_threshold' | 'offsite_add' | 'offsite_subtract';
 
 export type TransactionReason =
@@ -81,6 +86,8 @@ export interface InventoryItem {
   storageLocation?: StorageLocation;
   updatedAt: string;
   note?: string;
+  /** Display order within the same category + sub-category (lower first). */
+  sortOrder?: number;
 }
 
 /** True “out” for dashboards (ice cream placeholders often stay at 0 on purpose). */

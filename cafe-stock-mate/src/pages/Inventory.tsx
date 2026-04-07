@@ -9,6 +9,7 @@ import { CategoryChips } from '@/components/CategoryChips';
 import { ItemCard } from '@/components/ItemCard';
 import { AddSubtractModal } from '@/components/AddSubtractModal';
 import { EditItemDialog } from '@/components/EditItemDialog';
+import { SortableVerticalList, SubcategorySortableGroups } from '@/components/SubcategorySortableGroups';
 import { cn } from '@/lib/utils';
 import { buildLastStockEditMap } from '@/lib/inventoryHelpers';
 import { useAddToPurchaseList } from '@/hooks/useAddToPurchaseList';
@@ -19,46 +20,21 @@ import {
   CATEGORIES,
   canAddInventoryItems,
   canEditThreshold,
+  canReorderInventoryItems,
   isTrueOutOfStock,
   needsAttention,
 } from '@/types/inventory';
 
-function buildGroupedView(
-  items: InventoryItem[],
-  renderCard: (item: InventoryItem) => React.ReactNode,
-  groupBy: 'category' | 'subCategory',
-) {
-  const groupOrder: string[] = [];
-  const groups: Record<string, InventoryItem[]> = {};
-
-  for (const item of items) {
-    const key = groupBy === 'category'
-      ? item.category
-      : (item.subCategory ?? 'Other');
-    if (!groups[key]) { groupOrder.push(key); groups[key] = []; }
-    groups[key].push(item);
-  }
-
-  return (
-    <div className="space-y-5">
-      {groupOrder.map(group => (
-        <div key={group}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-primary">{group}</span>
-            <span className="text-xs text-muted-foreground font-medium">· {groups[group].length}</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-          <div className="space-y-2">
-            {groups[group].map(renderCard)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+/** True when every item shares the same category and sub_category (API reorder group). */
+function canReorderAsSingleGroup(items: InventoryItem[]): boolean {
+  if (items.length < 2) return false;
+  const cat = items[0].category;
+  const sub = items[0].subCategory ?? null;
+  return items.every(i => i.category === cat && (i.subCategory ?? null) === sub);
 }
 
 export default function Inventory() {
-  const { items, isLoading, error, updateThreshold, quickAdjust, transactions } = useInventory();
+  const { items, isLoading, error, updateThreshold, quickAdjust, transactions, reorderSubcategoryGroup } = useInventory();
   const { currentUser } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -258,6 +234,17 @@ export default function Inventory() {
 
   const isManager = canEditThreshold(currentUser?.role);
   const canAddSku = canAddInventoryItems(currentUser?.role);
+  const canReorderInventory = canReorderInventoryItems(currentUser?.role);
+
+  const sortableSubgroups = canReorderInventory && !restockMode && !search;
+
+  const handleReorderGroup = async (ids: string[]) => {
+    try {
+      await reorderSubcategoryGroup(ids);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save order');
+    }
+  };
   const handleThreshold = isManager
     ? async (item: InventoryItem, threshold: number) => { await updateThreshold(item.id, threshold); }
     : undefined;
@@ -312,6 +299,12 @@ export default function Inventory() {
             </span>
           </div>
         </div>
+        {canReorderInventory && !restockMode && !search && filtered.length > 1 && (
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            <span className="font-semibold text-foreground/70">Manager / admin:</span> drag the grip (⋮⋮) to
+            change item order; employees do not see this.
+          </p>
+        )}
 
         <div className="grid grid-cols-3 rounded-xl border border-border overflow-hidden">
           <button
@@ -514,21 +507,38 @@ export default function Inventory() {
                   </div>
 
                   {hasSubs ? (
-                    // Sub-category groups inside this category
-                    buildGroupedView(catItems, renderCard, 'subCategory')
+                    <SubcategorySortableGroups
+                      items={catItems}
+                      renderCard={renderCard}
+                      sortable={sortableSubgroups}
+                      onReorder={handleReorderGroup}
+                    />
                   ) : (
-                    <div className="space-y-2">{catItems.map(renderCard)}</div>
+                    <SortableVerticalList
+                      items={catItems}
+                      renderCard={renderCard}
+                      sortable={sortableSubgroups && canReorderAsSingleGroup(catItems)}
+                      onReorder={handleReorderGroup}
+                    />
                   )}
                 </div>
               );
             })}
           </div>
         ) : useSubCatGrouping ? (
-          // Normal inventory: group by sub-category
-          buildGroupedView(filtered, renderCard, 'subCategory')
+          <SubcategorySortableGroups
+            items={filtered}
+            renderCard={renderCard}
+            sortable={sortableSubgroups}
+            onReorder={handleReorderGroup}
+          />
         ) : (
-          // Flat list (search active, or specific sub-category selected)
-          <div className="space-y-2">{filtered.map(renderCard)}</div>
+          <SortableVerticalList
+            items={filtered}
+            renderCard={renderCard}
+            sortable={sortableSubgroups && canReorderAsSingleGroup(filtered)}
+            onReorder={handleReorderGroup}
+          />
         )}
       </div>
 
