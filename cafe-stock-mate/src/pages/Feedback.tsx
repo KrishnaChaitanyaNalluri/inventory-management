@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Bug, Lightbulb, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@/context/AuthContext';
 import { apiListFeedback, apiSubmitFeedback, type ApiFeedbackRow, type FeedbackCategory } from '@/lib/api';
-import { canEditThreshold } from '@/types/inventory';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -23,9 +21,6 @@ function formatWhen(iso: string) {
 }
 
 export default function Feedback() {
-  const { currentUser } = useAuth();
-  const isManagerOrAdmin = canEditThreshold(currentUser?.role);
-
   const [category, setCategory] = useState<FeedbackCategory>('bug');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -33,7 +28,6 @@ export default function Feedback() {
   const [loadingList, setLoadingList] = useState(false);
 
   const loadList = useCallback(async () => {
-    if (!isManagerOrAdmin) return;
     setLoadingList(true);
     try {
       const rows = await apiListFeedback(80);
@@ -43,7 +37,7 @@ export default function Feedback() {
     } finally {
       setLoadingList(false);
     }
-  }, [isManagerOrAdmin]);
+  }, []);
 
   useEffect(() => {
     loadList();
@@ -69,8 +63,7 @@ export default function Feedback() {
       <div className="bg-primary px-4 pt-6 pb-10 rounded-b-[1.75rem] shadow-sm">
         <h1 className="text-lg font-bold text-white">Feedback</h1>
         <p className="text-sm text-white/80 mt-1 max-w-md">
-          Report a bug or suggest an improvement.
-          {isManagerOrAdmin ? ' You can review all team notes below.' : ''}
+          Report a bug or suggest an improvement. Everyone on the team can see submissions below.
         </p>
       </div>
 
@@ -136,43 +129,41 @@ export default function Feedback() {
           </Button>
         </form>
 
-        {isManagerOrAdmin && (
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <h2 className="text-sm font-bold text-foreground mb-3">Team submissions</h2>
-            {loadingList ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : list.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-6">No feedback yet.</p>
-            ) : (
-              <ul className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-                {list.map(row => (
-                  <li
-                    key={row.id}
-                    className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm"
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-foreground mb-3">Team submissions</h2>
+          {loadingList ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : list.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">No feedback yet.</p>
+          ) : (
+            <ul className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+              {list.map(row => (
+                <li
+                  key={row.id}
+                  className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="font-semibold text-foreground truncate">{row.user_name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{formatWhen(row.created_at)}</span>
+                  </div>
+                  <span
+                    className={cn(
+                      'inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase mb-1.5',
+                      row.category === 'bug'
+                        ? 'bg-destructive/15 text-destructive'
+                        : 'bg-primary/15 text-primary',
+                    )}
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="font-semibold text-foreground truncate">{row.user_name}</span>
-                      <span className="text-[10px] text-muted-foreground shrink-0">{formatWhen(row.created_at)}</span>
-                    </div>
-                    <span
-                      className={cn(
-                        'inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase mb-1.5',
-                        row.category === 'bug'
-                          ? 'bg-destructive/15 text-destructive'
-                          : 'bg-primary/15 text-primary',
-                      )}
-                    >
-                      {row.category === 'bug' ? 'Bug' : 'Enhancement'}
-                    </span>
-                    <p className="text-xs text-foreground/90 whitespace-pre-wrap break-words">{row.message}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+                    {row.category === 'bug' ? 'Bug' : 'Enhancement'}
+                  </span>
+                  <p className="text-xs text-foreground/90 whitespace-pre-wrap break-words">{row.message}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

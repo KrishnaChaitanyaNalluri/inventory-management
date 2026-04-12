@@ -696,8 +696,9 @@ def submit_feedback(body: FeedbackCreateRequest, user=Depends(get_current_user))
 @app.get("/feedback", response_model=list[FeedbackResponse], include_in_schema=False)
 def list_feedback(
     limit: int = Query(80, le=200),
-    _mgr=Depends(require_manager),
+    _user=Depends(get_current_user),
 ):
+    """Any logged-in user can read the shared list (same visibility as in-app Ideas page)."""
     with get_cursor() as cur:
         cur.execute(
             """SELECT id, user_id, user_name, category, message, created_at

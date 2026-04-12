@@ -1,7 +1,13 @@
 """
-Run once to create tables and seed all data.
+Create tables and seed data.
+
   python migrate.py
+
+Re-runs are safe for inventory counts: existing rows keep current_quantity,
+offsite_quantity, and sort_order unless you pass --reset-quantities (then seed
+quantities overwrite the DB — use only when you want a full reset).
 """
+import argparse
 import os
 import bcrypt
 import psycopg2
@@ -303,7 +309,7 @@ ITEMS = [
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 
-def run():
+def run(*, reset_quantities: bool = False):
     dsn = os.getenv("DATABASE_URL")
     if not dsn:
         raise RuntimeError("DATABASE_URL not set in .env")
@@ -327,11 +333,9 @@ def run():
         )
     print(f"  {len(USERS)} users inserted/updated.")
 
-    print("Seeding inventory items...")
-    for row in ITEMS:
-        item_id, name, category, sub_cat, unit, qty, threshold, loc, note = row
-        cur.execute(
-            """INSERT INTO inventory_items
+    if reset_quantities:
+        print("Seeding inventory items (including quantities from seed — full reset)...")
+        conflict_items_sql = """INSERT INTO inventory_items
                (id, name, category, sub_category, unit, current_quantity, low_stock_threshold, storage_location, note)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (id) DO UPDATE SET
@@ -340,9 +344,22 @@ def run():
                  current_quantity=EXCLUDED.current_quantity,
                  low_stock_threshold=EXCLUDED.low_stock_threshold,
                  storage_location=EXCLUDED.storage_location,
-                 note=EXCLUDED.note""",
-            (item_id, name, category, sub_cat, unit, qty, threshold, loc, note),
-        )
+                 note=EXCLUDED.note"""
+    else:
+        print("Seeding inventory items (preserving existing quantities, offsite, sort order)...")
+        conflict_items_sql = """INSERT INTO inventory_items
+               (id, name, category, sub_category, unit, current_quantity, low_stock_threshold, storage_location, note)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (id) DO UPDATE SET
+                 name=EXCLUDED.name, category=EXCLUDED.category,
+                 sub_category=EXCLUDED.sub_category, unit=EXCLUDED.unit,
+                 low_stock_threshold=EXCLUDED.low_stock_threshold,
+                 storage_location=EXCLUDED.storage_location,
+                 note=EXCLUDED.note"""
+
+    for row in ITEMS:
+        item_id, name, category, sub_cat, unit, qty, threshold, loc, note = row
+        cur.execute(conflict_items_sql, (item_id, name, category, sub_cat, unit, qty, threshold, loc, note))
     print(f"  {len(ITEMS)} items inserted/updated.")
 
     conn.commit()
@@ -352,4 +369,11 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Create tables and seed Dumont inventory data.")
+    parser.add_argument(
+        "--reset-quantities",
+        action="store_true",
+        help="Overwrite current_quantity with seed file values (full reset). Default: keep live counts.",
+    )
+    args = parser.parse_args()
+    run(reset_quantities=args.reset_quantities)
